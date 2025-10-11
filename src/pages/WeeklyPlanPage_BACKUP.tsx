@@ -1,0 +1,10 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
+import { ChevronLeft, ChevronRight, Star, Clock, Check, MoreVertical, Calendar as CalendarIcon } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile } from 'lucide-react';
+import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
+import { ImageUploadModal } from '../components/ImageUploadModal';
+import { usePageBackground } from '../hooks/usePageBackground';
