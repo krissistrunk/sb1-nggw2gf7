@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Target, Star, TrendingUp, Sparkles, Inbox, Clock, Check, ChevronDown, ChevronUp, Target as TargetIcon } from 'lucide-react';
+import { Calendar, CheckCircle2, Target, Star, TrendingUp, Sparkles, Inbox, Clock, Check, ChevronDown, ChevronUp, Target as TargetIcon, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
@@ -429,6 +429,15 @@ export function WeeklyReviewPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              <div className="flex justify-end mb-2">
+                <Link
+                  to="/outcomes"
+                  className="flex items-center gap-2 px-4 py-2 text-primary-600 hover:bg-primary-50 rounded-lg font-medium transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Outcome
+                </Link>
+              </div>
               <div className="grid grid-cols-1 gap-3">
                 {outcomes.map((outcome) => {
                   const isSelected = selectedOutcomes.includes(outcome.id);

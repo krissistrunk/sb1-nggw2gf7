@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Star, Clock, Check, MoreVertical, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Clock, Check, MoreVertical, Calendar as CalendarIcon, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile } from 'lucide-react';
@@ -68,6 +68,13 @@ export function WeeklyPlanPage() {
   const [viewMode, setViewMode] = useState<'all' | 'scheduled' | 'unscheduled'>('all');
   const [draggedAction, setDraggedAction] = useState<Action | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showTimeBlockModal, setShowTimeBlockModal] = useState(false);
+  const [newTimeBlock, setNewTimeBlock] = useState({
+    title: '',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    startTime: '09:00',
+    duration: 60,
+  });
   const {
     getBackgroundUrl,
     getBackgroundPosition,
@@ -252,6 +259,38 @@ export function WeeklyPlanPage() {
   const previousWeek = () => setCurrentWeek(addDays(currentWeek, -7));
   const nextWeek = () => setCurrentWeek(addDays(currentWeek, 7));
 
+  const handleCreateTimeBlock = async () => {
+    if (!newTimeBlock.title.trim()) return;
+
+    try {
+      const [hours, minutes] = newTimeBlock.startTime.split(':').map(Number);
+      const scheduledStart = new Date(newTimeBlock.date);
+      scheduledStart.setHours(hours, minutes, 0, 0);
+
+      const scheduledEnd = new Date(scheduledStart.getTime() + newTimeBlock.duration * 60000);
+
+      await supabase.from('time_blocks').insert({
+        user_id: user?.id,
+        title: newTimeBlock.title,
+        scheduled_start: scheduledStart.toISOString(),
+        scheduled_end: scheduledEnd.toISOString(),
+        duration_minutes: newTimeBlock.duration,
+        completed: false,
+      });
+
+      setShowTimeBlockModal(false);
+      setNewTimeBlock({
+        title: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        startTime: '09:00',
+        duration: 60,
+      });
+      loadData();
+    } catch (error) {
+      console.error('Error creating time block:', error);
+    }
+  };
+
   return (
     <div>
       <BackgroundHeroSection
@@ -384,12 +423,21 @@ export function WeeklyPlanPage() {
               </button>
             </div>
 
-            <Link
-              to="/weekly-review"
-              className="px-6 py-2 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
-            >
-              Complete My Week
-            </Link>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTimeBlockModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-primary-500 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                New Time Block
+              </button>
+              <Link
+                to="/weekly-review"
+                className="px-6 py-2 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+              >
+                Complete My Week
+              </Link>
+            </div>
           </div>
 
           <div className="flex gap-2">
@@ -501,6 +549,90 @@ export function WeeklyPlanPage() {
           onUpload={uploadImage}
           onClose={() => setShowImageModal(false)}
         />
+      )}
+
+      {showTimeBlockModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowTimeBlockModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-8 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">New Time Block</h2>
+              <button
+                onClick={() => setShowTimeBlockModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <input
+                  type="text"
+                  value={newTimeBlock.title}
+                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, title: e.target.value })}
+                  placeholder="e.g., Deep Work, Meeting, Exercise"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={newTimeBlock.date}
+                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, date: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                <input
+                  type="time"
+                  value={newTimeBlock.startTime}
+                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, startTime: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                <input
+                  type="number"
+                  value={newTimeBlock.duration}
+                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, duration: parseInt(e.target.value) || 60 })}
+                  min="15"
+                  step="15"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowTimeBlockModal(false)}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateTimeBlock}
+                  disabled={!newTimeBlock.title.trim()}
+                  className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50"
+                >
+                  Create Block
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

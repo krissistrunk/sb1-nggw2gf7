@@ -44,6 +44,7 @@ interface Area {
 export function AreasPage() {
   const { user } = useAuth();
   const [areas, setAreas] = useState<Area[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [formData, setFormData] = useState({
@@ -71,6 +72,7 @@ export function AreasPage() {
 
   const loadAreas = async () => {
     try {
+      setLoading(true);
       const { data: areasData } = await supabase
         .from('areas')
         .select('*')
@@ -93,6 +95,8 @@ export function AreasPage() {
       setAreas(areasWithCounts);
     } catch (error) {
       console.error('Error loading areas:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -190,17 +194,27 @@ export function AreasPage() {
       </BackgroundHeroSection>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 pb-12 space-y-6">
-        <div className="flex justify-end">
-          <button
-            onClick={openNewModal}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
-          >
-            <Plus className="w-5 h-5" />
-            New Area
-          </button>
-        </div>
+        {!loading && (
+          <div className="flex justify-end">
+            <button
+              onClick={openNewModal}
+              className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+            >
+              <Plus className="w-5 h-5" />
+              New Area
+            </button>
+          </div>
+        )}
 
-      {areas.length === 0 ? (
+      {loading ? (
+        <div className="bg-white rounded-2xl p-12 text-center shadow-soft">
+          <div className="animate-pulse">
+            <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <div className="h-6 bg-gray-200 rounded w-48 mx-auto mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-64 mx-auto"></div>
+          </div>
+        </div>
+      ) : areas.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center shadow-soft">
           <Target className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No areas yet</h3>

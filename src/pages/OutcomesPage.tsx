@@ -212,32 +212,42 @@ export function OutcomesPage() {
       </BackgroundHeroSection>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 pb-12 space-y-4 sm:space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            <button
-              onClick={() => setShowDrafts(!showDrafts)}
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-                showDrafts
-                  ? 'bg-amber-100 text-amber-700 border-2 border-amber-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span className="hidden xs:inline">{showDrafts ? 'Showing Drafts' : 'Show Drafts'}</span>
-              <span className="xs:hidden">Drafts</span>
-            </button>
-            <button
-              onClick={openNewModal}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg text-sm sm:text-base min-h-touch-target"
-            >
-              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden xs:inline">New Outcome</span>
-              <span className="xs:hidden">New</span>
-            </button>
+        {!loading && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <button
+                onClick={() => setShowDrafts(!showDrafts)}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
+                  showDrafts
+                    ? 'bg-amber-100 text-amber-700 border-2 border-amber-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span className="hidden xs:inline">{showDrafts ? 'Showing Drafts' : 'Show Drafts'}</span>
+                <span className="xs:hidden">Drafts</span>
+              </button>
+              <button
+                onClick={openNewModal}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg text-sm sm:text-base min-h-touch-target"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden xs:inline">New Outcome</span>
+                <span className="xs:hidden">New</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+      {loading ? (
+        <div className="bg-white rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center shadow-soft">
+          <div className="animate-pulse">
+            <Target className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-3 sm:mb-4" />
+            <div className="h-6 bg-gray-200 rounded w-48 mx-auto mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-64 mx-auto"></div>
           </div>
         </div>
-
-      {activeOutcomes.length === 0 && completedOutcomes.length === 0 ? (
+      ) : activeOutcomes.length === 0 && completedOutcomes.length === 0 ? (
         <div className="bg-white rounded-xl sm:rounded-2xl p-8 sm:p-12 text-center shadow-soft">
           <Target className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
           <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No outcomes yet</h3>

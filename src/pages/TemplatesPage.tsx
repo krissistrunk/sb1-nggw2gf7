@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Sparkles, Search, ChevronRight, Check } from 'lucide-react';
+import { FileText, Sparkles, Search, ChevronRight, Check, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
@@ -20,6 +20,15 @@ export function TemplatesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [applying, setApplying] = useState<string | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({
+    name: '',
+    description: '',
+    category: 'Personal',
+    outcome_title: '',
+    purpose: '',
+    actions: [''],
+  });
   const {
     getBackgroundUrl,
     getBackgroundPosition,
@@ -40,6 +49,7 @@ export function TemplatesPage() {
         supabase
           .from('outcome_templates')
           .select('*')
+          .or(`is_public.eq.true,created_by.eq.${user.id}`)
           .order('name'),
         supabase
           .from('areas')
@@ -115,6 +125,39 @@ export function TemplatesPage() {
     }
   };
 
+  const handleCreateTemplate = async () => {
+    if (!user || !organization) return;
+    if (!newTemplate.name.trim() || !newTemplate.outcome_title.trim()) return;
+
+    try {
+      const { error } = await supabase.from('outcome_templates').insert({
+        name: newTemplate.name,
+        description: newTemplate.description,
+        category: newTemplate.category,
+        outcome_title: newTemplate.outcome_title,
+        purpose: newTemplate.purpose,
+        actions: newTemplate.actions.filter(a => a.trim()) as any,
+        is_public: false,
+        created_by: user.id,
+      });
+
+      if (error) throw error;
+
+      setShowCreateModal(false);
+      setNewTemplate({
+        name: '',
+        description: '',
+        category: 'Personal',
+        outcome_title: '',
+        purpose: '',
+        actions: [''],
+      });
+      loadData();
+    } catch (error) {
+      console.error('Error creating template:', error);
+    }
+  };
+
   const uniqueCategories = ['all', ...Array.from(new Set(templates.map(t => t.category.toLowerCase())))].sort();
   const categories = uniqueCategories.length > 1 ? uniqueCategories : ['all', 'business', 'health', 'relationships', 'personal', 'finance', 'lifestyle'];
 
@@ -171,6 +214,15 @@ export function TemplatesPage() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12 space-y-6">
 
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+        >
+          <Plus className="w-5 h-5" />
+          Create Custom Template
+        </button>
+      </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="space-y-4">
@@ -314,6 +366,146 @@ export function TemplatesPage() {
           onUpload={uploadImage}
           onClose={() => setShowImageModal(false)}
         />
+      )}
+
+      {showCreateModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-8 max-w-2xl w-full my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Create Custom Template</h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Template Name *</label>
+                <input
+                  type="text"
+                  value={newTemplate.name}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                  placeholder="e.g., My Custom Workflow"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={newTemplate.description}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
+                  placeholder="Describe what this template is for..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  rows={2}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <select
+                  value={newTemplate.category}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, category: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="Personal">Personal</option>
+                  <option value="Business">Business</option>
+                  <option value="Health">Health</option>
+                  <option value="Relationships">Relationships</option>
+                  <option value="Finance">Finance</option>
+                  <option value="Lifestyle">Lifestyle</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Outcome Title *</label>
+                <input
+                  type="text"
+                  value={newTemplate.outcome_title}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, outcome_title: e.target.value })}
+                  placeholder="e.g., Launch My Product"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Purpose Statement</label>
+                <textarea
+                  value={newTemplate.purpose}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, purpose: e.target.value })}
+                  placeholder="Why is this outcome important?"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Actions</label>
+                <div className="space-y-2">
+                  {newTemplate.actions.map((action, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={action}
+                        onChange={(e) => {
+                          const updatedActions = [...newTemplate.actions];
+                          updatedActions[index] = e.target.value;
+                          setNewTemplate({ ...newTemplate, actions: updatedActions });
+                        }}
+                        placeholder={`Action ${index + 1}`}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                      {newTemplate.actions.length > 1 && (
+                        <button
+                          onClick={() => {
+                            const updatedActions = newTemplate.actions.filter((_, i) => i !== index);
+                            setNewTemplate({ ...newTemplate, actions: updatedActions });
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setNewTemplate({ ...newTemplate, actions: [...newTemplate.actions, ''] })}
+                    className="flex items-center gap-2 px-4 py-2 text-primary-600 hover:bg-primary-50 rounded-lg font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Action
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateTemplate}
+                  disabled={!newTemplate.name.trim() || !newTemplate.outcome_title.trim()}
+                  className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

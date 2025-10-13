@@ -147,28 +147,92 @@ export function LifePlanPage() {
     }
   };
 
-  const handleAddValue = () => {
+  const handleAddValue = async () => {
     if (newValue.name.trim()) {
-      setValues([...values, newValue]);
+      const updatedValues = [...values, newValue];
+      setValues(updatedValues);
       setNewValue({ name: '', description: '' });
       setShowValueModal(false);
+
+      // Auto-save to database
+      try {
+        if (lifePlan) {
+          await supabase
+            .from('life_plans')
+            .update({
+              values: updatedValues as any,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', lifePlan.id);
+        }
+      } catch (error) {
+        console.error('Error saving value:', error);
+      }
     }
   };
 
-  const handleRemoveValue = (index: number) => {
-    setValues(values.filter((_, i) => i !== index));
+  const handleRemoveValue = async (index: number) => {
+    const updatedValues = values.filter((_, i) => i !== index);
+    setValues(updatedValues);
+
+    // Auto-save to database
+    try {
+      if (lifePlan) {
+        await supabase
+          .from('life_plans')
+          .update({
+            values: updatedValues as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lifePlan.id);
+      }
+    } catch (error) {
+      console.error('Error removing value:', error);
+    }
   };
 
-  const handleAddRole = () => {
+  const handleAddRole = async () => {
     if (newRole.name.trim()) {
-      setRoles([...roles, newRole]);
+      const updatedRoles = [...roles, newRole];
+      setRoles(updatedRoles);
       setNewRole({ name: '', description: '' });
       setShowRoleModal(false);
+
+      // Auto-save to database
+      try {
+        if (lifePlan) {
+          await supabase
+            .from('life_plans')
+            .update({
+              roles: updatedRoles as any,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', lifePlan.id);
+        }
+      } catch (error) {
+        console.error('Error saving role:', error);
+      }
     }
   };
 
-  const handleRemoveRole = (index: number) => {
-    setRoles(roles.filter((_, i) => i !== index));
+  const handleRemoveRole = async (index: number) => {
+    const updatedRoles = roles.filter((_, i) => i !== index);
+    setRoles(updatedRoles);
+
+    // Auto-save to database
+    try {
+      if (lifePlan) {
+        await supabase
+          .from('life_plans')
+          .update({
+            roles: updatedRoles as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lifePlan.id);
+      }
+    } catch (error) {
+      console.error('Error removing role:', error);
+    }
   };
 
   const handleToggleThreeToThrive = (areaId: string) => {
@@ -179,22 +243,54 @@ export function LifePlanPage() {
     }
   };
 
-  const handleAddResource = () => {
+  const handleAddResource = async () => {
     if (newResourceItem.trim()) {
-      setResources({
+      const updatedResources = {
         ...resources,
         [resourceType]: [...resources[resourceType], newResourceItem.trim()]
-      });
+      };
+      setResources(updatedResources);
       setNewResourceItem('');
       setShowResourceModal(false);
+
+      // Auto-save to database
+      try {
+        if (lifePlan) {
+          await supabase
+            .from('life_plans')
+            .update({
+              resources: updatedResources as any,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', lifePlan.id);
+        }
+      } catch (error) {
+        console.error('Error saving resource:', error);
+      }
     }
   };
 
-  const handleRemoveResource = (type: 'people' | 'skills' | 'tools', index: number) => {
-    setResources({
+  const handleRemoveResource = async (type: 'people' | 'skills' | 'tools', index: number) => {
+    const updatedResources = {
       ...resources,
       [type]: resources[type].filter((_, i) => i !== index)
-    });
+    };
+    setResources(updatedResources);
+
+    // Auto-save to database
+    try {
+      if (lifePlan) {
+        await supabase
+          .from('life_plans')
+          .update({
+            resources: updatedResources as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lifePlan.id);
+      }
+    } catch (error) {
+      console.error('Error removing resource:', error);
+    }
   };
 
   const getAreaById = (areaId: string) => {
@@ -314,15 +410,13 @@ export function LifePlanPage() {
                 <Heart className="w-8 h-8 text-red-500" />
                 <h2 className="text-2xl font-bold text-gray-900">Core Values</h2>
               </div>
-              {isEditing && (
-                <button
-                  onClick={() => setShowValueModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Value
-                </button>
-              )}
+              <button
+                onClick={() => setShowValueModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Value
+              </button>
             </div>
             <p className="text-sm text-gray-600 mb-6">
               What are the 5-10 core values that define who you are and guide your decisions?
@@ -342,14 +436,12 @@ export function LifePlanPage() {
                     key={index}
                     className="p-4 bg-red-50 rounded-xl border-2 border-red-200 relative group"
                   >
-                    {isEditing && (
-                      <button
-                        onClick={() => handleRemoveValue(index)}
-                        className="absolute top-2 right-2 p-1 text-red-600 hover:bg-red-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleRemoveValue(index)}
+                      className="absolute top-2 right-2 p-1 text-red-600 hover:bg-red-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                     <h3 className="font-bold text-red-900 mb-1">{value.name}</h3>
                     <p className="text-sm text-red-700">{value.description}</p>
                   </div>
@@ -364,15 +456,13 @@ export function LifePlanPage() {
                 <User className="w-8 h-8 text-green-500" />
                 <h2 className="text-2xl font-bold text-gray-900">Life Roles</h2>
               </div>
-              {isEditing && (
-                <button
-                  onClick={() => setShowRoleModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Role
-                </button>
-              )}
+              <button
+                onClick={() => setShowRoleModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Role
+              </button>
             </div>
             <p className="text-sm text-gray-600 mb-6">
               What are the key roles you play in life? (e.g., Leader, Parent, Partner, Friend, Creator)
@@ -392,14 +482,12 @@ export function LifePlanPage() {
                     key={index}
                     className="p-4 bg-green-50 rounded-xl border-2 border-green-200 relative group"
                   >
-                    {isEditing && (
-                      <button
-                        onClick={() => handleRemoveRole(index)}
-                        className="absolute top-2 right-2 p-1 text-green-600 hover:bg-green-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleRemoveRole(index)}
+                      className="absolute top-2 right-2 p-1 text-green-600 hover:bg-green-200 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                     <h3 className="font-bold text-green-900 mb-1">{role.name}</h3>
                     <p className="text-sm text-green-700">{role.description}</p>
                   </div>
@@ -487,15 +575,13 @@ export function LifePlanPage() {
                 <Package className="w-8 h-8 text-teal-500" />
                 <h2 className="text-2xl font-bold text-gray-900">Resources</h2>
               </div>
-              {isEditing && (
-                <button
-                  onClick={() => setShowResourceModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Resource
-                </button>
-              )}
+              <button
+                onClick={() => setShowResourceModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Resource
+              </button>
             </div>
             <p className="text-sm text-gray-600 mb-6">
               What resources do you have available to achieve your goals? People, skills, tools, and finances.
@@ -517,14 +603,12 @@ export function LifePlanPage() {
                         className="px-3 py-1 bg-teal-50 text-teal-700 rounded-lg text-sm flex items-center gap-2"
                       >
                         {person}
-                        {isEditing && (
-                          <button
-                            onClick={() => handleRemoveResource('people', index)}
-                            className="text-teal-600 hover:text-teal-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleRemoveResource('people', index)}
+                          className="text-teal-600 hover:text-teal-800"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -546,14 +630,12 @@ export function LifePlanPage() {
                         className="px-3 py-1 bg-teal-50 text-teal-700 rounded-lg text-sm flex items-center gap-2"
                       >
                         {skill}
-                        {isEditing && (
-                          <button
-                            onClick={() => handleRemoveResource('skills', index)}
-                            className="text-teal-600 hover:text-teal-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleRemoveResource('skills', index)}
+                          className="text-teal-600 hover:text-teal-800"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -575,14 +657,12 @@ export function LifePlanPage() {
                         className="px-3 py-1 bg-teal-50 text-teal-700 rounded-lg text-sm flex items-center gap-2"
                       >
                         {tool}
-                        {isEditing && (
-                          <button
-                            onClick={() => handleRemoveResource('tools', index)}
-                            className="text-teal-600 hover:text-teal-800"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleRemoveResource('tools', index)}
+                          className="text-teal-600 hover:text-teal-800"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
                   </div>

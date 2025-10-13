@@ -40,6 +40,7 @@ export function TodayPage() {
   const [showFocusTimer, setShowFocusTimer] = useState(false);
   const [selectedAction, setSelectedAction] = useState<ActionType | undefined>(undefined);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [quickAddAction, setQuickAddAction] = useState('');
   const {
     getBackgroundUrl,
     getBackgroundPosition,
@@ -147,6 +148,26 @@ export function TodayPage() {
     }
   };
 
+  const handleQuickAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddAction.trim() || !user) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      await supabase.from('actions').insert({
+        user_id: user.id,
+        title: quickAddAction.trim(),
+        scheduled_date: today,
+        done: false,
+      });
+
+      setQuickAddAction('');
+      loadData();
+    } catch (error) {
+      console.error('Error adding quick action:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -177,6 +198,27 @@ export function TodayPage() {
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12 space-y-4 sm:space-y-6 lg:space-y-8">
 
         <DailyProgressWidget />
+
+        {/* Quick Add Action */}
+        <form onSubmit={handleQuickAdd} className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft border border-gray-200">
+          <div className="flex gap-2 sm:gap-3">
+            <input
+              type="text"
+              value={quickAddAction}
+              onChange={(e) => setQuickAddAction(e.target.value)}
+              placeholder="Quick add action for today..."
+              className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl text-sm sm:text-base focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            <button
+              type="submit"
+              disabled={!quickAddAction.trim()}
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden xs:inline">Add</span>
+            </button>
+          </div>
+        </form>
 
         <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 shadow-soft">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-2">
