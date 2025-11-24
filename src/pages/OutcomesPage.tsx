@@ -49,6 +49,8 @@ export function OutcomesPage() {
   });
   const [loading, setLoading] = useState(true);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showQuickAddArea, setShowQuickAddArea] = useState(false);
+  const [newAreaName, setNewAreaName] = useState('');
   const {
     getBackgroundUrl,
     getBackgroundPosition,
@@ -188,6 +190,34 @@ export function OutcomesPage() {
     setEditingOutcome(null);
     setFormData({ title: '', description: '', purpose: '', area_id: areas[0]?.id || '', goal_id: '' });
     setShowModal(true);
+  };
+
+  const handleQuickAddArea = async () => {
+    if (!newAreaName.trim() || !user || !organization?.id) return;
+
+    try {
+      const { data: newArea, error: areaError } = await supabase
+        .from('areas')
+        .insert({
+          user_id: user.id,
+          organization_id: organization.id,
+          name: newAreaName.trim(),
+          icon: 'layers',
+          color: '#F97316',
+        })
+        .select()
+        .single();
+
+      if (areaError) throw areaError;
+
+      setAreas([...areas, newArea]);
+      setFormData({ ...formData, area_id: newArea.id });
+      setNewAreaName('');
+      setShowQuickAddArea(false);
+    } catch (error) {
+      console.error('Error creating area:', error);
+      alert('Failed to create area. Please try again.');
+    }
   };
 
   const activeOutcomes = outcomes.filter(o => o.status === 'ACTIVE');
@@ -450,27 +480,79 @@ export function OutcomesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Area</label>
-                <select
-                  value={formData.area_id}
-                  onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Select an area</option>
-                  {areas.map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))}
-                </select>
-                {areas.length === 0 && (
-                  <p className="mt-2 text-sm text-gray-500">
-                    No areas yet.{' '}
-                    <a href="/areas" className="text-primary-600 hover:text-primary-700">
-                      Create one first
-                    </a>
-                  </p>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Area</label>
+                  {!showQuickAddArea && (
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAddArea(true)}
+                      className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Quick Add Area
+                    </button>
+                  )}
+                </div>
+
+                {showQuickAddArea ? (
+                  <div className="space-y-2 p-3 border-2 border-primary-200 rounded-xl bg-primary-50">
+                    <input
+                      type="text"
+                      value={newAreaName}
+                      onChange={(e) => setNewAreaName(e.target.value)}
+                      placeholder="New area name (e.g., Health, Career)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && newAreaName.trim()) {
+                          e.preventDefault();
+                          handleQuickAddArea();
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQuickAddArea}
+                        disabled={!newAreaName.trim()}
+                        className="flex-1 px-3 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create Area
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowQuickAddArea(false);
+                          setNewAreaName('');
+                        }}
+                        className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={formData.area_id}
+                      onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select an area</option>
+                      {areas.map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.name}
+                        </option>
+                      ))}
+                    </select>
+                    {areas.length === 0 && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        No areas available. Click "Quick Add Area" above to create one.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -506,7 +588,7 @@ export function OutcomesPage() {
                 <button
                   type="button"
                   onClick={(e) => handleSubmit(e, true)}
-                  disabled={areas.length === 0 || !formData.title?.trim()}
+                  disabled={!formData.title?.trim() || (!formData.area_id && areas.length === 0 && !showQuickAddArea)}
                   className="flex-1 px-6 py-3 border-2 border-primary-500 text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   title="Save as draft to continue editing later"
                 >
@@ -516,7 +598,7 @@ export function OutcomesPage() {
                 <button
                   type="submit"
                   className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50"
-                  disabled={areas.length === 0}
+                  disabled={!formData.area_id && areas.length === 0 && !showQuickAddArea}
                 >
                   {editingOutcome?.is_draft ? 'Publish Outcome' : editingOutcome ? 'Save Changes' : 'Create Outcome'}
                 </button>

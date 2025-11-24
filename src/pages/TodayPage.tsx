@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Target, Plus, X, Check, Timer, Flame, User, Clock, Trash2 } from 'lucide-react';
+import { Target, Plus, X, Check, Timer, Flame, User, Clock, Trash2, Inbox, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useActions } from '../hooks/useActions';
@@ -154,12 +154,31 @@ export function TodayPage() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      await supabase.from('actions').insert({
-        user_id: user.id,
-        title: quickAddAction.trim(),
-        scheduled_date: today,
-        done: false,
-      });
+
+      if (selectedOutcomes.length > 0) {
+        const firstOutcomeId = selectedOutcomes[0].id;
+        await supabase.from('actions').insert({
+          user_id: user.id,
+          outcome_id: firstOutcomeId,
+          title: quickAddAction.trim(),
+          scheduled_date: today,
+          done: false,
+        });
+      } else {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single();
+
+        await supabase.from('inbox_items').insert({
+          user_id: user.id,
+          organization_id: userData?.organization_id,
+          content: quickAddAction.trim(),
+          item_type: 'ACTION_IDEA',
+          triaged: false,
+        });
+      }
 
       setQuickAddAction('');
       loadData();
@@ -201,22 +220,35 @@ export function TodayPage() {
 
         {/* Quick Add Action */}
         <form onSubmit={handleQuickAdd} className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft border border-gray-200">
-          <div className="flex gap-2 sm:gap-3">
-            <input
-              type="text"
-              value={quickAddAction}
-              onChange={(e) => setQuickAddAction(e.target.value)}
-              placeholder="Quick add action for today..."
-              className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl text-sm sm:text-base focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-            <button
-              type="submit"
-              disabled={!quickAddAction.trim()}
-              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden xs:inline">Add</span>
-            </button>
+          <div className="flex flex-col gap-2">
+            {selectedOutcomes.length > 0 ? (
+              <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                <Target className="w-3 h-3 text-primary-500" />
+                <span>Adding to: <span className="font-semibold text-primary-600">{selectedOutcomes[0].title}</span></span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                <Inbox className="w-3 h-3 text-gray-500" />
+                <span>Will be saved to Inbox (select an outcome above first to add directly)</span>
+              </div>
+            )}
+            <div className="flex gap-2 sm:gap-3">
+              <input
+                type="text"
+                value={quickAddAction}
+                onChange={(e) => setQuickAddAction(e.target.value)}
+                placeholder="Quick add action for today..."
+                className="flex-1 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl text-sm sm:text-base focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <button
+                type="submit"
+                disabled={!quickAddAction.trim()}
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden xs:inline">Add</span>
+              </button>
+            </div>
           </div>
         </form>
 
@@ -297,9 +329,25 @@ export function TodayPage() {
           </div>
 
           {selectedOutcomes.length === 0 ? (
-            <div className="text-center py-8 sm:py-12 text-gray-500">
-              <Target className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 opacity-40" />
-              <p className="text-sm sm:text-base">Select up to 5 outcomes to focus on today</p>
+            <div className="text-center py-8 sm:py-12">
+              <Target className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 opacity-40 text-gray-400" />
+              <p className="text-sm sm:text-base text-gray-600 mb-4">Select up to 5 outcomes to focus on today</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                <button
+                  onClick={() => window.location.href = '/daily-planning'}
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg sm:rounded-xl font-semibold hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg flex items-center gap-2 text-sm sm:text-base min-h-touch-target"
+                >
+                  <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+                  Start Daily Planning Ritual
+                </button>
+                <button
+                  onClick={() => setShowOutcomeModal(true)}
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 border-2 border-gray-300 text-gray-700 rounded-lg sm:rounded-xl font-semibold hover:bg-gray-50 transition-colors text-sm sm:text-base min-h-touch-target"
+                >
+                  Select Outcomes Manually
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">The planning ritual helps you choose the right focus for today</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">

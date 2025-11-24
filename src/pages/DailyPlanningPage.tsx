@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, User, Trash2 } from 'lucide-react';
+import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, User, Trash2, Package, Edit2, Archive, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { supabase } from '../lib/supabase';
@@ -7,17 +7,30 @@ import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { useActions } from '../hooks/useActions';
 import { DraggableActionItem } from '../components/DraggableActionItem';
-import type { OutcomeWithRelations, DailyNote, Action, InboxItem } from '../lib/database.types';
+import type { OutcomeWithRelations, DailyNote, Action, InboxItem, ChunkWithItems } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { useChunks } from '../hooks/useChunks';
+import { AIChunkSuggestions } from '../components/AIChunkSuggestions';
 
-type PlanningStep = 'welcome' | 'review-outcomes' | 'select-focus' | 'set-purpose' | 'plan-actions' | 'time-block' | 'commit';
+type PlanningStep = 'welcome' | 'capture' | 'organize' | 'review-outcomes' | 'select-focus' | 'set-purpose' | 'plan-actions' | 'commit';
 
 export function DailyPlanningPage() {
   const { user } = useAuth();
   const { organization } = useOrganization();
   const { deleteAction, reorderActions } = useActions();
+  const {
+    chunks,
+    loading: chunksLoading,
+    createChunk,
+    updateChunk,
+    deleteChunk,
+    archiveChunk,
+    addItemToChunk,
+    removeItemFromChunk,
+    refresh: refreshChunks,
+  } = useChunks();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -44,6 +57,13 @@ export function DailyPlanningPage() {
   const [editActionDuration, setEditActionDuration] = useState(30);
   const [mustActions, setMustActions] = useState<Set<string>>(new Set());
   const [delegatedActions, setDelegatedActions] = useState<Record<string, string>>({});
+  const [capturedItems, setCapturedItems] = useState<string[]>([]);
+  const [capturedItemsData, setCapturedItemsData] = useState<InboxItem[]>([]);
+  const [draggedItem, setDraggedItem] = useState<InboxItem | null>(null);
+  const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
+  const [editingChunk, setEditingChunk] = useState<string | null>(null);
+  const [chunkName, setChunkName] = useState('');
+  const [newCaptureItem, setNewCaptureItem] = useState('');
   const [editActionDelegatedTo, setEditActionDelegatedTo] = useState('');
   const [newActionDelegatedTo, setNewActionDelegatedTo] = useState('');
   const [showImageModal, setShowImageModal] = useState(false);
@@ -133,13 +153,139 @@ export function DailyPlanningPage() {
     }
   };
 
+  const loadCapturedItems = async () => {
+    if (capturedItems.length === 0) return;
+
+    try {
+      const { data } = await supabase
+        .from('inbox_items')
+        .select('*')
+        .in('id', capturedItems)
+        .eq('triaged', false);
+
+      setCapturedItemsData(data || []);
+    } catch (error) {
+      console.error('Error loading captured items:', error);
+    }
+  };
+
+  const handleDragStart = (item: InboxItem) => {
+    setDraggedItem(item);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDropOnCategory = async (targetType: 'OUTCOME_IDEA' | 'ACTION_IDEA' | 'NOTE') => {
+    if (!draggedItem) return;
+
+    try {
+      await supabase
+        .from('inbox_items')
+        .update({ item_type: targetType })
+        .eq('id', draggedItem.id);
+
+      setCapturedItemsData(capturedItemsData.filter(item => item.id !== draggedItem.id));
+      setDraggedItem(null);
+      await loadCapturedItems();
+    } catch (error) {
+      console.error('Error updating item type:', error);
+    }
+  };
+
+  const handleDropOnChunk = async (chunkId: string) => {
+    if (!draggedItem) return;
+
+    try {
+      await addItemToChunk(chunkId, draggedItem.id);
+      await supabase
+        .from('inbox_items')
+        .update({ triaged: true })
+        .eq('id', draggedItem.id);
+
+      setCapturedItemsData(capturedItemsData.filter(item => item.id !== draggedItem.id));
+      setDraggedItem(null);
+      await refreshChunks();
+    } catch (error) {
+      console.error('Error adding item to chunk:', error);
+    }
+  };
+
+  const handleCreateChunk = async () => {
+    if (!chunkName.trim()) return;
+
+    try {
+      await createChunk(chunkName.trim());
+      setChunkName('');
+      setEditingChunk(null);
+    } catch (error) {
+      console.error('Error creating chunk:', error);
+    }
+  };
+
+  const handleUpdateChunkName = async (chunkId: string, newName: string) => {
+    if (!newName.trim()) return;
+
+    try {
+      await updateChunk(chunkId, { name: newName.trim() });
+      setEditingChunk(null);
+    } catch (error) {
+      console.error('Error updating chunk name:', error);
+    }
+  };
+
+  const handleRemoveFromChunk = async (chunkItemId: string, inboxItemId: string) => {
+    try {
+      await removeItemFromChunk(chunkItemId, inboxItemId);
+      await supabase
+        .from('inbox_items')
+        .update({ triaged: false })
+        .eq('id', inboxItemId);
+
+      await loadCapturedItems();
+      await refreshChunks();
+    } catch (error) {
+      console.error('Error removing item from chunk:', error);
+    }
+  };
+
+  const toggleChunkExpanded = (chunkId: string) => {
+    setExpandedChunks((prev) => {
+      const next = new Set(prev);
+      if (next.has(chunkId)) {
+        next.delete(chunkId);
+      } else {
+        next.add(chunkId);
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteCapturedItem = async (id: string) => {
+    try {
+      await supabase.from('inbox_items').delete().eq('id', id);
+      setCapturedItemsData(capturedItemsData.filter(item => item.id !== id));
+      setCapturedItems(capturedItems.filter(itemId => itemId !== id));
+    } catch (error) {
+      console.error('Error deleting item:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentStep === 'organize' && capturedItems.length > 0) {
+      loadCapturedItems();
+      refreshChunks();
+    }
+  }, [currentStep]);
+
   const handleSelectOutcome = (outcome: OutcomeWithRelations) => {
     if (selectedOutcomes.find((o) => o.id === outcome.id)) {
       setSelectedOutcomes(selectedOutcomes.filter((o) => o.id !== outcome.id));
       const newPurposes = { ...purposes };
       delete newPurposes[outcome.id];
       setPurposes(newPurposes);
-    } else if (selectedOutcomes.length < 3) {
+    } else if (selectedOutcomes.length < 7) {
       setSelectedOutcomes([...selectedOutcomes, outcome]);
       setPurposes({ ...purposes, [outcome.id]: outcome.purpose || '' });
     }
@@ -497,9 +643,9 @@ export function DailyPlanningPage() {
                 1
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Review Your Outcomes</h3>
+                <h3 className="font-semibold text-gray-900">Capture & Clear Your Mind</h3>
                 <p className="text-sm text-gray-600">
-                  See all your active results and choose what matters most today
+                  Quick brain dump - get everything out of your head (2-3 min)
                 </p>
               </div>
             </div>
@@ -508,9 +654,9 @@ export function DailyPlanningPage() {
                 2
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Select 1-3 Focus Outcomes</h3>
+                <h3 className="font-semibold text-gray-900">Quick Organize</h3>
                 <p className="text-sm text-gray-600">
-                  Pick the results that will move you forward most significantly
+                  Group related captured items into RPM blocks (2 min)
                 </p>
               </div>
             </div>
@@ -519,9 +665,9 @@ export function DailyPlanningPage() {
                 3
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Connect to Your Purpose</h3>
+                <h3 className="font-semibold text-gray-900">Review All Outcomes</h3>
                 <p className="text-sm text-gray-600">
-                  Remind yourself WHY each outcome matters to you
+                  See your active outcomes and newly created blocks (3 min)
                 </p>
               </div>
             </div>
@@ -530,9 +676,9 @@ export function DailyPlanningPage() {
                 4
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Plan Your Massive Actions</h3>
+                <h3 className="font-semibold text-gray-900">Select 1-7 Focus Outcomes</h3>
                 <p className="text-sm text-gray-600">
-                  Select the specific actions you'll take today to achieve your results
+                  Choose the results that will move you forward today (2 min)
                 </p>
               </div>
             </div>
@@ -541,20 +687,439 @@ export function DailyPlanningPage() {
                 5
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Commit & Begin</h3>
+                <h3 className="font-semibold text-gray-900">Build RPM Blocks</h3>
                 <p className="text-sm text-gray-600">
-                  Set your intention and start your day with clarity and purpose
+                  Set purpose, actions, time, and delegation for each outcome (4-5 min)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center justify-center flex-shrink-0">
+                6
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Set Intention & Commit</h3>
+                <p className="text-sm text-gray-600">
+                  Write your morning intention and commit to your plan (1-2 min)
                 </p>
               </div>
             </div>
           </div>
           <button
-            onClick={() => setCurrentStep('review-outcomes')}
+            onClick={() => setCurrentStep('capture')}
             className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
           >
             Begin Daily Planning
             <ChevronRight className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {currentStep === 'capture' && (
+        <div className="bg-white rounded-2xl p-8 shadow-soft">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Morning Capture</h2>
+            <p className="text-gray-600">
+              What's on your mind this morning? Quickly capture any urgent or important items not already planned.
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newCaptureItem.trim()) return;
+
+              try {
+                const { data } = await supabase.from('inbox_items').insert({
+                  user_id: user?.id,
+                  organization_id: organization?.id,
+                  content: newCaptureItem.trim(),
+                  item_type: 'NOTE',
+                  triaged: false,
+                }).select().single();
+
+                if (data) {
+                  setCapturedItems([...capturedItems, data.id]);
+                  setNewCaptureItem('');
+                }
+              } catch (error) {
+                console.error('Error capturing item:', error);
+              }
+            }} className="space-y-4">
+              <input
+                type="text"
+                value={newCaptureItem}
+                onChange={(e) => setNewCaptureItem(e.target.value)}
+                placeholder="What's on your mind?"
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={!newCaptureItem.trim()}
+                  className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50"
+                >
+                  <Plus className="w-5 h-5 inline mr-2" />
+                  Capture Item
+                </button>
+              </div>
+            </form>
+
+            {capturedItems.length > 0 && (
+              <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-sm text-green-800">
+                  <strong>{capturedItems.length} items captured!</strong> You can organize these in the next step.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>Tip:</strong> Need a deeper brain dump? Visit the <a href="/capture" className="underline font-semibold">Capture page</a> for full organizing features.
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={() => setCurrentStep('welcome')}
+              className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => {
+                if (capturedItems.length === 0) {
+                  setCurrentStep('review-outcomes');
+                } else {
+                  setCurrentStep('organize');
+                }
+              }}
+              className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+            >
+              {capturedItems.length === 0 ? 'Skip to Review Outcomes' : 'Continue to Organize'}
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {currentStep === 'organize' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-soft">
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-2xl font-bold text-gray-900">Quick Organize</h2>
+                {capturedItemsData.length > 1 && (
+                  <AIChunkSuggestions
+                    inboxItems={capturedItemsData}
+                    onChunksCreated={async () => {
+                      await refreshChunks();
+                      await loadCapturedItems();
+                    }}
+                  />
+                )}
+              </div>
+              <p className="text-gray-600">
+                Group related items into chunks or categorize by type. Items added to chunks will be triaged.
+              </p>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Progress:</strong> {capturedItems.length - capturedItemsData.length} of {capturedItems.length} items organized
+              </p>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newCaptureItem.trim()) return;
+
+              try {
+                const { data } = await supabase.from('inbox_items').insert({
+                  user_id: user?.id,
+                  organization_id: organization?.id,
+                  content: newCaptureItem.trim(),
+                  item_type: 'NOTE',
+                  triaged: false,
+                }).select().single();
+
+                if (data) {
+                  setCapturedItems([...capturedItems, data.id]);
+                  setCapturedItemsData([...capturedItemsData, data]);
+                  setNewCaptureItem('');
+                }
+              } catch (error) {
+                console.error('Error capturing item:', error);
+              }
+            }} className="mb-6">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCaptureItem}
+                  onChange={(e) => setNewCaptureItem(e.target.value)}
+                  placeholder="Capture more items..."
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <button
+                  type="submit"
+                  disabled={!newCaptureItem.trim()}
+                  className="px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+            </form>
+
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Chunks</h3>
+                {editingChunk === 'new' ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={chunkName}
+                      onChange={(e) => setChunkName(e.target.value)}
+                      placeholder="Chunk name..."
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleCreateChunk}
+                      className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600"
+                    >
+                      Create
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingChunk(null);
+                        setChunkName('');
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingChunk('new')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Chunk
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {chunks.map((chunk) => (
+                  <div
+                    key={chunk.id}
+                    className="border-2 rounded-xl p-4"
+                    style={{ borderColor: chunk.color }}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDropOnChunk(chunk.id)}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        {editingChunk === chunk.id ? (
+                          <input
+                            type="text"
+                            defaultValue={chunk.name}
+                            onBlur={(e) => {
+                              if (e.target.value.trim()) {
+                                handleUpdateChunkName(chunk.id, e.target.value);
+                              } else {
+                                setEditingChunk(null);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                              }
+                            }}
+                            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Package
+                              className="w-5 h-5 flex-shrink-0"
+                              style={{ color: chunk.color }}
+                            />
+                            <h4 className="font-semibold text-gray-900">{chunk.name}</h4>
+                            <span className="text-xs text-gray-500">
+                              ({chunk.items.length} items)
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingChunk(chunk.id)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => toggleChunkExpanded(chunk.id)}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
+                        >
+                          {expandedChunks.has(chunk.id) ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => archiveChunk(chunk.id)}
+                          className="p-1.5 text-gray-400 hover:text-orange-600 rounded"
+                        >
+                          <Archive className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteChunk(chunk.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {expandedChunks.has(chunk.id) && (
+                      <div className="space-y-2 mt-3 pt-3 border-t">
+                        {chunk.items.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-gray-50 rounded-lg p-3 flex items-start justify-between"
+                          >
+                            <p className="text-sm text-gray-900 flex-1">
+                              {item.inbox_item.content}
+                            </p>
+                            <button
+                              onClick={() => handleRemoveFromChunk(item.id, item.inbox_item_id)}
+                              className="text-xs text-red-600 hover:text-red-700 ml-2"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        {chunk.items.length === 0 && (
+                          <p className="text-sm text-gray-500 italic text-center py-2">
+                            Drag items here to add to this chunk
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {chunks.length === 0 && (
+                  <p className="text-center text-gray-500 italic py-4">
+                    No chunks yet. Create one to group related items together.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Categorize by Type</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div
+                  className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200 min-h-[100px]"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDropOnCategory('OUTCOME_IDEA')}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="w-5 h-5 text-blue-600" />
+                    <h4 className="text-sm font-bold text-blue-900">Outcome Ideas</h4>
+                  </div>
+                  <p className="text-xs text-blue-700">
+                    Drag items here to categorize as outcome ideas
+                  </p>
+                </div>
+
+                <div
+                  className="bg-green-50 rounded-xl p-4 border-2 border-green-200 min-h-[100px]"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDropOnCategory('ACTION_IDEA')}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-5 h-5 text-green-600" />
+                    <h4 className="text-sm font-bold text-green-900">Action Ideas</h4>
+                  </div>
+                  <p className="text-xs text-green-700">
+                    Drag items here to categorize as action ideas
+                  </p>
+                </div>
+
+                <div
+                  className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200 min-h-[100px]"
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDropOnCategory('NOTE')}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Lightbulb className="w-5 h-5 text-gray-600" />
+                    <h4 className="text-sm font-bold text-gray-900">Notes</h4>
+                  </div>
+                  <p className="text-xs text-gray-700">
+                    Drag items here to categorize as notes
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {capturedItemsData.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Uncategorized Items ({capturedItemsData.length})
+                </h3>
+                <div className="space-y-2">
+                  {capturedItemsData.map((item) => (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={() => handleDragStart(item)}
+                      className="p-3 rounded-lg border-2 border-gray-200 bg-white hover:shadow-md transition-shadow cursor-move"
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm text-gray-900 flex-1">{item.content}</p>
+                        <button
+                          onClick={() => handleDeleteCapturedItem(item.id)}
+                          className="text-gray-400 hover:text-red-600 ml-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setCurrentStep('capture')}
+                className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setCurrentStep('review-outcomes')}
+                className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+              >
+                Continue to Review Outcomes
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {capturedItemsData.length > 0 && (
+            <div className="bg-yellow-50 rounded-xl p-4 border-2 border-yellow-200">
+              <p className="text-sm text-yellow-800">
+                <strong>Tip:</strong> You have {capturedItemsData.length} items remaining. You can organize them now or continue and finish organizing later on the Capture page.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -625,14 +1190,14 @@ export function DailyPlanningPage() {
         <div className="bg-white rounded-2xl p-8 shadow-soft">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Select 1-3 Outcomes to Focus On Today
+              Select 1-7 Outcomes to Focus On Today
             </h2>
             <p className="text-gray-600">
-              Choose the results that will have the biggest impact. Quality over quantity!
+              Choose the results that will move you forward. You can select up to 7 focus outcomes for today.
             </p>
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xs sm:text-sm text-blue-800">
-                <strong>Selected: {selectedOutcomes.length} / 3</strong>
+                <strong>Selected: {selectedOutcomes.length} / 7</strong>
               </p>
             </div>
           </div>
@@ -644,7 +1209,7 @@ export function DailyPlanningPage() {
                 <button
                   key={outcome.id}
                   onClick={() => handleSelectOutcome(outcome)}
-                  disabled={!isSelected && selectedOutcomes.length >= 3}
+                  disabled={!isSelected && selectedOutcomes.length >= 7}
                   className={`w-full text-left p-6 border-2 rounded-xl transition-all ${
                     isSelected
                       ? 'border-primary-500 bg-primary-50'

@@ -20,6 +20,8 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { MonthlyReviewPage } from './pages/MonthlyReviewPage';
 import { WeeklyPlanPage } from './pages/WeeklyPlanPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { SetupOrganizationPage } from './pages/SetupOrganizationPage';
+import { VoiceCoachPage } from './pages/VoiceCoachPage';
 
 function App() {
   return (
@@ -29,6 +31,14 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/seed-users" element={<SeedUsersPage />} />
+          <Route
+            path="/setup-organization"
+            element={
+              <ProtectedRoute>
+                <SetupOrganizationPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/"
@@ -210,6 +220,17 @@ function App() {
               <ProtectedRoute>
                 <AppLayout>
                   <ProfilePage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/voice"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <VoiceCoachPage />
                 </AppLayout>
               </ProtectedRoute>
             }
