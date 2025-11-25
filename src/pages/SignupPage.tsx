@@ -19,7 +19,7 @@ export function SignupPage() {
 
     try {
       await signUp(email, password, name);
-      navigate('/today');
+      navigate('/setup-organization');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
     } finally {

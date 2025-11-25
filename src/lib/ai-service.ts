@@ -103,11 +103,29 @@ class AIService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'AI request failed');
+      let errorMessage = 'AI request failed';
+      try {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } catch {
+        // Response wasn't JSON, try to get text
+        try {
+          const text = await response.text();
+          errorMessage = text || `HTTP ${response.status}: ${response.statusText}`;
+        } catch {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+      }
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw new Error('Invalid JSON response from AI service');
+    }
+    
     return result.data;
   }
 

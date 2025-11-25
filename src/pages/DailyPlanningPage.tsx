@@ -107,21 +107,29 @@ export function DailyPlanningPage() {
         return;
       }
 
-      const outcomesWithActions = await Promise.all(
-        outcomesData.map(async (outcome) => {
-          const { data: actionsData } = await supabase
-            .from('actions')
-            .select('*')
-            .eq('outcome_id', outcome.id)
-            .eq('done', false)
-            .order('sort_order', { ascending: true });
+      // Optimized: Single query for all actions instead of N+1 queries
+      const outcomeIds = outcomesData.map(o => o.id);
+      const { data: allActionsData } = await supabase
+        .from('actions')
+        .select('*')
+        .in('outcome_id', outcomeIds)
+        .eq('done', false)
+        .order('sort_order', { ascending: true });
 
-          return {
-            ...outcome,
-            actions: actionsData || [],
-          } as OutcomeWithRelations;
-        })
-      );
+      // Group actions by outcome_id
+      const actionsByOutcome: Record<string, typeof allActionsData> = {};
+      (allActionsData || []).forEach(action => {
+        if (!actionsByOutcome[action.outcome_id]) {
+          actionsByOutcome[action.outcome_id] = [];
+        }
+        actionsByOutcome[action.outcome_id].push(action);
+      });
+
+      // Combine outcomes with their actions
+      const outcomesWithActions = outcomesData.map(outcome => ({
+        ...outcome,
+        actions: actionsByOutcome[outcome.id] || [],
+      } as OutcomeWithRelations));
 
       setOutcomes(outcomesWithActions);
 
@@ -1190,16 +1198,23 @@ export function DailyPlanningPage() {
         <div className="bg-white rounded-2xl p-8 shadow-soft">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Select 1-7 Outcomes to Focus On Today
+              Select Your Top 3-4 Focus Outcomes for Today
             </h2>
             <p className="text-gray-600">
-              Choose the results that will move you forward. You can select up to 7 focus outcomes for today.
+              Tony Robbins' RPM methodology: Focus on 3-4 key outcomes maximum (up to 5 if truly essential). More than this dilutes your focus and returns you to to-do list thinking.
             </p>
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xs sm:text-sm text-blue-800">
-                <strong>Selected: {selectedOutcomes.length} / 7</strong>
+                <strong>Selected: {selectedOutcomes.length} / 5</strong>
               </p>
             </div>
+            {selectedOutcomes.length > 4 && (
+              <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-300">
+                <p className="text-sm text-yellow-800">
+                  <strong>⚠️ You've selected {selectedOutcomes.length} outcomes.</strong> Tony Robbins recommends 3-4 maximum for optimal focus. Consider if all are truly essential for today.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3 mb-8">
@@ -1209,7 +1224,7 @@ export function DailyPlanningPage() {
                 <button
                   key={outcome.id}
                   onClick={() => handleSelectOutcome(outcome)}
-                  disabled={!isSelected && selectedOutcomes.length >= 7}
+                  disabled={!isSelected && selectedOutcomes.length >= 5}
                   className={`w-full text-left p-6 border-2 rounded-xl transition-all ${
                     isSelected
                       ? 'border-primary-500 bg-primary-50'
@@ -1250,28 +1265,54 @@ export function DailyPlanningPage() {
       {currentStep === 'set-purpose' && (
         <div className="bg-white rounded-2xl p-8 shadow-soft">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Connect to Your Purpose</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Reconnect to Your Purpose</h2>
             <p className="text-gray-600">
-              Remind yourself WHY these outcomes matter. This is what will fuel your motivation and
-              focus.
+              This is the MOST IMPORTANT step. Your purpose provides the emotional fuel to follow through. Without connecting to your WHY, you'll fall back into reactive mode.
             </p>
+          </div>
+
+          <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+            <h3 className="font-bold text-red-900 mb-3 flex items-center gap-2">
+              <Heart className="w-5 h-5" />
+              Tony Robbins' Purpose Reconnection Ritual
+            </h3>
+            <div className="space-y-2 text-sm text-red-800">
+              <p><strong>For EACH outcome below:</strong></p>
+              <ol className="list-decimal list-inside space-y-1 ml-2">
+                <li>Read your purpose OUT LOUD (right now, don't skip this)</li>
+                <li>Close your eyes and visualize achieving this outcome today</li>
+                <li>Ask yourself: "How will I FEEL when I accomplish this?"</li>
+                <li>Ask yourself: "What will achieving this give me emotionally?"</li>
+                <li>Ask yourself: "What will NOT doing this cost me?"</li>
+              </ol>
+            </div>
           </div>
 
           <div className="space-y-6 mb-8">
             {selectedOutcomes.map((outcome) => (
-              <div key={outcome.id} className="border-2 border-primary-200 rounded-xl p-6 bg-primary-50">
+              <div key={outcome.id} className="border-2 border-red-300 rounded-xl p-6 bg-gradient-to-br from-red-50 to-orange-50">
                 <div className="flex items-start gap-3 mb-4">
                   <Target className="w-6 h-6 text-primary-600 flex-shrink-0 mt-1" />
                   <h3 className="text-xl font-bold text-gray-900">{outcome.title}</h3>
                 </div>
-                <div className="flex items-start gap-2 mb-3">
-                  <Heart className="w-5 h-5 text-red-500 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Why this matters:</p>
-                    <p className="text-lg text-gray-900 italic leading-relaxed">
-                      {purposes[outcome.id] || outcome.purpose}
-                    </p>
+                <div className="mb-4 p-4 bg-white rounded-lg border-2 border-red-200">
+                  <div className="flex items-start gap-2 mb-3">
+                    <Heart className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-red-700 mb-2">YOUR WHY - Read this OUT LOUD now:</p>
+                      <p className="text-lg text-gray-900 italic leading-relaxed font-medium">
+                        "{purposes[outcome.id] || outcome.purpose}"
+                      </p>
+                    </div>
                   </div>
+                </div>
+                <div className="space-y-2 text-sm text-gray-700 bg-white bg-opacity-60 rounded-lg p-3">
+                  <p className="font-semibold text-red-800">Answer these questions in your mind:</p>
+                  <ul className="space-y-1 ml-4 list-disc">
+                    <li>How will you <strong>FEEL</strong> when you achieve this today?</li>
+                    <li>What will achieving this <strong>give you</strong> emotionally?</li>
+                    <li>What will <strong>NOT</strong> doing this <strong>cost you</strong>?</li>
+                  </ul>
                 </div>
               </div>
             ))}

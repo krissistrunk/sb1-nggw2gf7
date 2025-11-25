@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Building2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { DEFAULT_PRIMARY_COLOR, DEFAULT_FEATURE_FLAGS, ROUTES } from '../lib/constants';
 
 export function SetupOrganizationPage() {
   const { user } = useAuth();
@@ -44,9 +45,9 @@ export function SetupOrganizationPage() {
         .insert({
           name: organizationName.trim(),
           subdomain: finalSubdomain,
-          primary_color: '#F97316',
+          primary_color: DEFAULT_PRIMARY_COLOR,
           subscription_tier: 'STARTER',
-          feature_flags: { voiceCoaching: true, analytics: false, customIntegrations: false },
+          feature_flags: DEFAULT_FEATURE_FLAGS,
           settings: {},
         })
         .select()
@@ -72,7 +73,7 @@ export function SetupOrganizationPage() {
 
       if (userUpdateError) throw userUpdateError;
 
-      navigate('/today');
+      navigate(ROUTES.TODAY);
       window.location.reload();
     } catch (err: any) {
       console.error('Error creating organization:', err);

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { OrganizationProvider } from './contexts/OrganizationContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppLayout } from './components/AppLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { SeedUsersPage } from './pages/SeedUsersPage';
@@ -16,6 +17,7 @@ import { OutcomeDetailPage } from './pages/OutcomeDetailPage';
 import { LifePlanPage } from './pages/LifePlanPage';
 import { GoalsPage } from './pages/GoalsPage';
 import { WeeklyReviewPage } from './pages/WeeklyReviewPage';
+import { WeeklyReflectionPage } from './pages/WeeklyReflectionPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { MonthlyReviewPage } from './pages/MonthlyReviewPage';
 import { WeeklyPlanPage } from './pages/WeeklyPlanPage';
@@ -26,15 +28,16 @@ import { VoiceCoachPage } from './pages/VoiceCoachPage';
 function App() {
   return (
     <BrowserRouter>
-      <OrganizationProvider>
-        <Routes>
+      <ErrorBoundary>
+        <OrganizationProvider>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/seed-users" element={<SeedUsersPage />} />
           <Route
             path="/setup-organization"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireOrganization={false}>
                 <SetupOrganizationPage />
               </ProtectedRoute>
             }
@@ -171,6 +174,17 @@ function App() {
           />
 
           <Route
+            path="/weekly-reflection"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <WeeklyReflectionPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/templates"
             element={
               <ProtectedRoute>
@@ -235,8 +249,9 @@ function App() {
               </ProtectedRoute>
             }
           />
-        </Routes>
-      </OrganizationProvider>
+          </Routes>
+        </OrganizationProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

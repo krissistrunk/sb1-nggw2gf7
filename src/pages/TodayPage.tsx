@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Target, Plus, X, Check, Timer, Flame, User, Clock, Trash2, Inbox, Zap } from 'lucide-react';
+import { Target, Plus, X, Check, Timer, Flame, User, Clock, Trash2, Inbox, Zap, Heart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 import { useActions } from '../hooks/useActions';
 import { FocusTimer } from '../components/FocusTimer';
 import { DailyProgressWidget } from '../components/DailyProgressWidget';
@@ -15,6 +16,7 @@ interface Outcome {
   id: string;
   title: string;
   area_id: string;
+  purpose?: string | null;
 }
 
 interface ActionExtended {
@@ -29,6 +31,7 @@ interface ActionExtended {
 
 export function TodayPage() {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const { deleteAction } = useActions();
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [selectedOutcomes, setSelectedOutcomes] = useState<Outcome[]>([]);
@@ -165,15 +168,15 @@ export function TodayPage() {
           done: false,
         });
       } else {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('organization_id')
-          .eq('id', user.id)
-          .single();
-
+        // Use organization from context - guaranteed to exist due to ProtectedRoute
+        if (!organization) {
+          console.error('No organization found');
+          return;
+        }
+        
         await supabase.from('inbox_items').insert({
           user_id: user.id,
-          organization_id: userData?.organization_id,
+          organization_id: organization.id,
           content: quickAddAction.trim(),
           item_type: 'ACTION_IDEA',
           triaged: false,
@@ -359,6 +362,17 @@ export function TodayPage() {
                 return (
                   <div key={outcome.id} className="border-l-4 border-primary-500 pl-3 sm:pl-4">
                     <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">{outcome.title}</h3>
+                    {outcome.purpose && (
+                      <div className="mb-3 p-3 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border-2 border-red-200">
+                        <div className="flex items-start gap-2">
+                          <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-red-900 text-xs sm:text-sm mb-1">Your WHY:</h4>
+                            <p className="text-xs sm:text-sm text-red-800 italic leading-relaxed">{outcome.purpose}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {actions.length > 0 ? (
                       <div className="space-y-2">
                         {actions.map(action => (
