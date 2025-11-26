@@ -294,47 +294,54 @@ export function WeeklyReviewPage() {
           height="h-64"
           onEditClick={() => setShowImageModal(true)}
         >
-          <div className="text-center text-white px-4">
+          <div className="text-center text-white px-4 py-8">
             <Calendar className="w-16 h-16 mx-auto mb-4 opacity-90" />
             <h1 className="text-5xl font-bold mb-4">Weekly Review</h1>
-            <p className="text-xl text-white/90">{weekLabel}</p>
+            <p className="text-xl text-white/90 mb-2">{weekLabel}</p>
           {lastReviewDate && (
-            <p className="text-sm text-primary-200 mb-8">
+            <p className="text-sm text-white/70 mb-4">
               Last review: {format(new Date(lastReviewDate), 'MMM d, yyyy')}
             </p>
           )}
-          <p className="text-lg text-primary-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-lg text-white/90 mb-6 max-w-2xl mx-auto">
             Take 30 minutes to review your week, clear your inbox, choose your top outcomes, and set
             yourself up for success.
           </p>
-          <div className="flex gap-4 justify-center">
-            {isWeekend() && (
-              <button
-                onClick={handleRemindLater}
-                className="px-6 py-3 bg-white/10 text-white rounded-xl font-semibold hover:bg-white/20 transition-colors border-2 border-white/30"
-              >
-                <Clock className="w-5 h-5 inline mr-2" />
-                Remind Me Tomorrow
-              </button>
-            )}
-            <button
-              onClick={() => setCurrentStep('inbox')}
-              className="px-8 py-4 bg-white text-primary-600 rounded-xl font-semibold hover:bg-primary-50 transition-colors shadow-lg"
-            >
-              Start Review
-            </button>
-            <button
-              onClick={handleSkipReview}
-              className="px-6 py-3 bg-white/10 text-white rounded-xl font-semibold hover:bg-white/20 transition-colors border-2 border-white/30"
-            >
-              Skip This Week
-            </button>
-          </div>
           </div>
         </BackgroundHeroSection>
       )}
 
-<div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12 space-y-6">
+      {currentStep === 'welcome' && (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12 relative z-20">
+          <div className="bg-white rounded-2xl shadow-soft px-6 py-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {isWeekend() && (
+                <button
+                  onClick={handleRemindLater}
+                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors border-2 border-gray-300"
+                >
+                  <Clock className="w-5 h-5 inline mr-2" />
+                  Remind Me Tomorrow
+                </button>
+              )}
+              <button
+                onClick={() => setCurrentStep('inbox')}
+                className="px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+              >
+                Start Review
+              </button>
+              <button
+                onClick={handleSkipReview}
+                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors border-2 border-gray-300"
+              >
+                Skip This Week
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+<div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 space-y-6">
         {currentStep !== 'complete' && currentStep !== 'welcome' && (
           <div className="bg-white rounded-2xl p-6 shadow-soft">
             <div className="flex items-center justify-between mb-4">

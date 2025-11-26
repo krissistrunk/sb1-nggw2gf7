@@ -235,11 +235,31 @@ export function LifePlanPage() {
     }
   };
 
-  const handleToggleThreeToThrive = (areaId: string) => {
+  const handleToggleThreeToThrive = async (areaId: string) => {
+    let updatedThreeToThrive;
     if (threeToThrive.includes(areaId)) {
-      setThreeToThrive(threeToThrive.filter(id => id !== areaId));
+      updatedThreeToThrive = threeToThrive.filter(id => id !== areaId);
     } else if (threeToThrive.length < 3) {
-      setThreeToThrive([...threeToThrive, areaId]);
+      updatedThreeToThrive = [...threeToThrive, areaId];
+    } else {
+      return;
+    }
+
+    setThreeToThrive(updatedThreeToThrive);
+
+    // Auto-save to database
+    try {
+      if (lifePlan) {
+        await supabase
+          .from('life_plans')
+          .update({
+            three_to_thrive: updatedThreeToThrive as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lifePlan.id);
+      }
+    } catch (error) {
+      console.error('Error saving three to thrive:', error);
     }
   };
 
@@ -359,6 +379,15 @@ export function LifePlanPage() {
                 <Compass className="w-8 h-8 text-blue-500" />
                 <h2 className="text-2xl font-bold text-gray-900">Your Ultimate Vision</h2>
               </div>
+              {!isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
             </div>
             <p className="text-sm text-gray-600 mb-4">
               If your life were exactly how you wanted it to be in all areas, what would it look like?
@@ -368,13 +397,14 @@ export function LifePlanPage() {
               <textarea
                 value={vision}
                 onChange={(e) => setVision(e.target.value)}
+                onBlur={handleSave}
                 placeholder="Describe your ultimate vision... Be specific and dream big! What does your ideal life look like 5, 10, 20 years from now?"
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                 rows={8}
               />
             ) : (
               <div className="prose prose-lg max-w-none">
-                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{vision}</p>
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{vision || 'Click Edit to add your ultimate vision...'}</p>
               </div>
             )}
           </div>
@@ -385,6 +415,15 @@ export function LifePlanPage() {
                 <Target className="w-8 h-8 text-purple-500" />
                 <h2 className="text-2xl font-bold text-gray-900">Your Purpose</h2>
               </div>
+              {!isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
             </div>
             <p className="text-sm text-gray-600 mb-4">
               Why do you exist? What is the core reason behind your vision? This is your north star.
@@ -393,13 +432,14 @@ export function LifePlanPage() {
               <textarea
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
+                onBlur={handleSave}
                 placeholder="Describe your core purpose... Why does this vision matter to you? What impact do you want to have?"
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                 rows={4}
               />
             ) : (
               <div className="prose prose-lg max-w-none">
-                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{purpose || 'No purpose defined yet'}</p>
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{purpose || 'Click Edit to add your purpose...'}</p>
               </div>
             )}
           </div>
@@ -528,8 +568,7 @@ export function LifePlanPage() {
                   return (
                     <button
                       key={area.id}
-                      onClick={() => isEditing && handleToggleThreeToThrive(area.id)}
-                      disabled={!isEditing && !isSelected}
+                      onClick={() => handleToggleThreeToThrive(area.id)}
                       className={`p-4 rounded-xl border-2 text-left transition-all ${
                         isSelected
                           ? 'bg-orange-50 border-orange-500'

@@ -66,6 +66,7 @@ export interface AIVoiceAnalysis {
   themes: string[];
   suggested_area: string;
   summary: string;
+  ai_response?: string;
 }
 
 export interface AIChunkSuggestion {
@@ -192,6 +193,49 @@ class AIService {
   async suggestChunks(inboxItems: any[]): Promise<AIChunkSuggestions> {
     return await this.callEdgeFunction('suggest-chunks', {
       inboxItems,
+    });
+  }
+
+  async coachingResponse(
+    sessionType: 'PLANNING' | 'REFLECTION' | 'COACHING' | 'MOTIVATION' | 'CLARIFICATION',
+    userMessage: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    contextData?: any
+  ): Promise<{ response: string; suggestions?: string[]; relevantKnowledge?: any[] }> {
+    return await this.callEdgeFunction('coaching-response', {
+      sessionType,
+      userMessage,
+      conversationHistory: conversationHistory || [],
+      contextData,
+    });
+  }
+
+  async retrieveRelevantKnowledge(query: string, limit = 5): Promise<any[]> {
+    return await this.callEdgeFunction('semantic-search', {
+      query,
+      limit,
+    });
+  }
+
+  async saveVoiceSession(
+    sessionType: string,
+    contextType: string | null,
+    contextId: string | null,
+    audioUrl: string | null,
+    transcript: string,
+    durationSeconds: number,
+    aiInsights: any,
+    aiResponse: string | null
+  ): Promise<any> {
+    return await this.callEdgeFunction('save-voice-session', {
+      sessionType,
+      contextType,
+      contextId,
+      audioUrl,
+      transcript,
+      durationSeconds,
+      aiInsights,
+      aiResponse,
     });
   }
 }

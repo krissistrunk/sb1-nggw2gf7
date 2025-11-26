@@ -26,7 +26,7 @@ export function BackgroundHeroSection({
 
   return (
     <div
-      className={`relative ${height} bg-cover bg-center flex items-center justify-center group`}
+      className={`relative ${height} bg-cover bg-center flex items-center justify-center group overflow-hidden`}
       style={{
         backgroundImage: `url(${imageUrl})`,
         backgroundPosition: imagePosition,
@@ -34,7 +34,7 @@ export function BackgroundHeroSection({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <div className="absolute inset-0" style={overlayStyle} />
+      <div className="absolute inset-0 z-0" style={overlayStyle} />
 
       {onEditClick && isHovering && (
         <button

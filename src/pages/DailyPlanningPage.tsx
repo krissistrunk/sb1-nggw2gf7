@@ -13,6 +13,8 @@ import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
 import { useChunks } from '../hooks/useChunks';
 import { AIChunkSuggestions } from '../components/AIChunkSuggestions';
+import { VoiceCoachButton } from '../components/VoiceCoachButton';
+import { aiService } from '../lib/ai-service';
 
 type PlanningStep = 'welcome' | 'capture' | 'organize' | 'review-outcomes' | 'select-focus' | 'set-purpose' | 'plan-actions' | 'commit';
 
@@ -730,6 +732,55 @@ export function DailyPlanningPage() {
             <p className="text-gray-600">
               What's on your mind this morning? Quickly capture any urgent or important items not already planned.
             </p>
+          </div>
+
+          <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-primary-50 rounded-xl border border-purple-200">
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-gray-900 mb-1">Voice Capture</h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Speak your thoughts naturally - the AI will transcribe and organize them for you
+                </p>
+              </div>
+              <VoiceCoachButton
+                onRecordingComplete={async (audioUrl, blob, durationSeconds) => {
+                  try {
+                    const base64Audio = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        const base64 = reader.result as string;
+                        resolve(base64.split(',')[1]);
+                      };
+                      reader.readAsDataURL(blob);
+                    });
+
+                    const result = await aiService.transcribeVoice(base64Audio, 'PLANNING');
+
+                    if (result.items && result.items.length > 0) {
+                      for (const item of result.items) {
+                        const { data } = await supabase.from('inbox_items').insert({
+                          user_id: user?.id,
+                          organization_id: organization?.id,
+                          content: item.content,
+                          item_type: item.type === 'ACTION' ? 'ACTION_IDEA' : item.type === 'OUTCOME' ? 'OUTCOME_IDEA' : 'NOTE',
+                          triaged: false,
+                        }).select().single();
+
+                        if (data) {
+                          setCapturedItems((prev) => [...prev, data.id]);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error processing voice capture:', error);
+                    alert('Failed to process voice recording. Please try again.');
+                  }
+                }}
+                size="md"
+                variant="primary"
+                maxDurationSeconds={180}
+              />
+            </div>
           </div>
 
           <div className="mb-6">

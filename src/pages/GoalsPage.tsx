@@ -251,30 +251,57 @@ export function GoalsPage() {
         </div>
       </BackgroundHeroSection>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 pb-12 space-y-6">
-        <div className="flex items-center justify-end gap-3">
-          <button
-            onClick={() => setShowDrafts(!showDrafts)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              showDrafts
-                ? 'bg-amber-100 text-amber-700 border-2 border-amber-300'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            {showDrafts ? 'Showing Drafts' : 'Show Drafts'}
-          </button>
-          <button
-            onClick={openNewModal}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
-          >
-            <Plus className="w-5 h-5" />
-            New {activeTab === 'YEARLY' ? 'Yearly' : 'Quarterly'} Goal
-          </button>
-        </div>
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 pb-12 relative z-10">
       <div className="bg-white rounded-2xl shadow-soft border border-gray-200">
         <div className="border-b border-gray-200">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex">
+            <button
+              onClick={() => setActiveTab('YEARLY')}
+              className={`px-6 py-2 text-center font-semibold transition-colors ${
+                activeTab === 'YEARLY'
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Calendar className="w-5 h-5 inline mr-2" />
+              Yearly Goals
+            </button>
+            <button
+              onClick={() => setActiveTab('QUARTERLY')}
+              className={`px-6 py-2 text-center font-semibold transition-colors ${
+                activeTab === 'QUARTERLY'
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <TrendingUp className="w-5 h-5 inline mr-2" />
+              Quarterly Goals
+            </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowDrafts(!showDrafts)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  showDrafts
+                    ? 'bg-amber-100 text-amber-700 border-2 border-amber-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                {showDrafts ? 'Showing Drafts' : 'Show Drafts'}
+              </button>
+              <button
+                onClick={openNewModal}
+                className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+              >
+                <Plus className="w-5 h-5" />
+                New {activeTab === 'YEARLY' ? 'Yearly' : 'Quarterly'} Goal
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="border-b border-gray-200 hidden">
           <div className="flex">
             <button
               onClick={() => setActiveTab('YEARLY')}
@@ -335,17 +362,19 @@ export function GoalsPage() {
                           key={goal.id}
                           className="bg-white rounded-xl p-6 shadow-soft border-2 border-gray-200 hover:shadow-soft-lg transition-all group relative"
                         >
-                          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute top-4 right-4 flex gap-2">
                             <button
                               onClick={() => openEditModal(goal)}
-                              className="p-2 bg-white rounded-lg shadow-md text-gray-400 hover:text-blue-600 transition-colors"
+                              className="p-2 bg-blue-500 rounded-lg shadow-md text-white hover:bg-blue-600 transition-colors"
+                              title="Edit goal"
                             >
                               <Save className="w-4 h-4" />
                             </button>
                             {goal.status === 'ACTIVE' && (
                               <button
                                 onClick={() => handleArchive(goal.id)}
-                                className="p-2 bg-white rounded-lg shadow-md text-gray-400 hover:text-orange-600 transition-colors"
+                                className="p-2 bg-gray-100 rounded-lg shadow-md text-gray-600 hover:bg-orange-500 hover:text-white transition-colors"
+                                title="Archive goal"
                               >
                                 <Archive className="w-4 h-4" />
                               </button>

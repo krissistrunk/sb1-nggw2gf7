@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Target, Calendar, Layers, User, Mic, Lightbulb, Sun, Moon, Compass, TrendingUp, Sparkles, Menu, X } from 'lucide-react';
+import { Target, Calendar, Layers, User, Mic, Lightbulb, Sun, Moon, Compass, TrendingUp, Sparkles, Menu, X, Brain } from 'lucide-react';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { useAuth } from '../hooks/useAuth';
 
@@ -67,6 +67,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       title: 'Tools',
       items: [
         { name: 'Capture', path: '/capture', icon: Lightbulb },
+        { name: 'Knowledge Base', path: '/knowledge', icon: Brain },
       ]
     },
   ];

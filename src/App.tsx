@@ -24,6 +24,8 @@ import { WeeklyPlanPage } from './pages/WeeklyPlanPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SetupOrganizationPage } from './pages/SetupOrganizationPage';
 import { VoiceCoachPage } from './pages/VoiceCoachPage';
+import { KnowledgeBasePage } from './pages/KnowledgeBasePage';
+import { KnowledgeGraphPage } from './pages/KnowledgeGraphPage';
 
 function App() {
   return (
@@ -245,6 +247,28 @@ function App() {
               <ProtectedRoute>
                 <AppLayout>
                   <VoiceCoachPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/knowledge"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <KnowledgeBasePage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/knowledge-graph"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <KnowledgeGraphPage />
                 </AppLayout>
               </ProtectedRoute>
             }

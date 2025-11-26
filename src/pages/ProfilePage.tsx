@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Building, Calendar, Save, LogOut } from 'lucide-react';
+import { User, Mail, Building, Calendar, Save, LogOut, Volume2, Play, Loader } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { supabase } from '../lib/supabase';
+import { elevenlabsService, POPULAR_VOICES } from '../lib/elevenlabs-service';
 
 export function ProfilePage() {
   const { user, signOut } = useAuth();
@@ -13,6 +14,15 @@ export function ProfilePage() {
     full_name: '',
     email: '',
   });
+  const [voiceSettings, setVoiceSettings] = useState({
+    voice_mode: 'browser' as 'browser' | 'elevenlabs',
+    elevenlabs_voice_id: 'EXAVITQu4vr4xnSDxMaL',
+    browser_voice: null as string | null,
+    speech_rate: 1.0,
+    pitch: 1.0,
+    volume: 1.0,
+  });
+  const [testingVoice, setTestingVoice] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -24,7 +34,7 @@ export function ProfilePage() {
     try {
       const { data } = await supabase
         .from('users')
-        .select('full_name, email')
+        .select('full_name, email, voice_settings')
         .eq('id', user?.id)
         .maybeSingle();
 
@@ -33,6 +43,9 @@ export function ProfilePage() {
           full_name: data.full_name || '',
           email: data.email || user?.email || '',
         });
+        if (data.voice_settings) {
+          setVoiceSettings(data.voice_settings);
+        }
       } else {
         setFormData({
           full_name: '',
@@ -54,6 +67,7 @@ export function ProfilePage() {
         .from('users')
         .update({
           full_name: formData.full_name,
+          voice_settings: voiceSettings,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user?.id);
@@ -67,6 +81,20 @@ export function ProfilePage() {
       setMessage('Failed to update profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const testVoice = async (voiceId: string) => {
+    setTestingVoice(voiceId);
+    try {
+      const testText = 'Hello! This is how I sound. I\'m here to help you achieve your goals and stay focused on what matters most.';
+      const audioUrl = await elevenlabsService.textToSpeech(testText, voiceId);
+      await elevenlabsService.playAudio(audioUrl);
+    } catch (error) {
+      console.error('Failed to test voice:', error);
+      setMessage('Failed to test voice');
+    } finally {
+      setTestingVoice(null);
     }
   };
 
@@ -198,6 +226,153 @@ export function ProfilePage() {
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 shadow-soft">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
+          <Volume2 className="w-6 h-6 text-primary-500" />
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Voice Coach Settings</h2>
+            <p className="text-sm text-gray-600">Customize your AI coach's voice</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              Voice Mode
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setVoiceSettings({ ...voiceSettings, voice_mode: 'browser' })}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  voiceSettings.voice_mode === 'browser'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="font-semibold mb-1">Browser Voice</div>
+                <div className="text-xs">Free, system voices</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceSettings({ ...voiceSettings, voice_mode: 'elevenlabs' })}
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  voiceSettings.voice_mode === 'elevenlabs'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="font-semibold mb-1">ElevenLabs</div>
+                <div className="text-xs">Premium AI voices</div>
+              </button>
+            </div>
+          </div>
+
+          {voiceSettings.voice_mode === 'elevenlabs' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Select Voice
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {POPULAR_VOICES.map((voice) => (
+                  <div
+                    key={voice.voice_id}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      voiceSettings.elevenlabs_voice_id === voice.voice_id
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                    onClick={() => setVoiceSettings({ ...voiceSettings, elevenlabs_voice_id: voice.voice_id })}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-gray-900">{voice.name}</div>
+                        <div className="text-xs text-gray-600 capitalize">
+                          {voice.labels?.gender} • {voice.labels?.age}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          testVoice(voice.voice_id);
+                        }}
+                        disabled={testingVoice !== null}
+                        className="p-2 hover:bg-primary-100 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {testingVoice === voice.voice_id ? (
+                          <Loader className="w-4 h-4 text-primary-500 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4 text-primary-500" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-600">{voice.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Speech Rate: {voiceSettings.speech_rate.toFixed(1)}x
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={voiceSettings.speech_rate}
+              onChange={(e) => setVoiceSettings({ ...voiceSettings, speech_rate: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Slower (0.5x)</span>
+              <span>Faster (2x)</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Pitch: {voiceSettings.pitch.toFixed(1)}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.1"
+              value={voiceSettings.pitch}
+              onChange={(e) => setVoiceSettings({ ...voiceSettings, pitch: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Lower</span>
+              <span>Higher</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Volume: {Math.round(voiceSettings.volume * 100)}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={voiceSettings.volume}
+              onChange={(e) => setVoiceSettings({ ...voiceSettings, volume: parseFloat(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Quiet</span>
+              <span>Loud</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 shadow-soft">

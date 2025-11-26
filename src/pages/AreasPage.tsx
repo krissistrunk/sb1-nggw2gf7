@@ -193,21 +193,26 @@ export function AreasPage() {
         </div>
       </BackgroundHeroSection>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 pb-12 space-y-6">
-        {!loading && (
-          <div className="flex justify-end">
-            <button
-              onClick={openNewModal}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
-            >
-              <Plus className="w-5 h-5" />
-              New Area
-            </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 pb-12 relative z-10">
+        <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Your Areas of Focus</h2>
+              <p className="text-gray-600 mt-1">Organize your life into meaningful categories</p>
+            </div>
+            {!loading && (
+              <button
+                onClick={openNewModal}
+                className="flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg"
+              >
+                <Plus className="w-5 h-5" />
+                New Area
+              </button>
+            )}
           </div>
-        )}
 
       {loading ? (
-        <div className="bg-white rounded-2xl p-12 text-center shadow-soft">
+        <div className="p-12 text-center">
           <div className="animate-pulse">
             <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <div className="h-6 bg-gray-200 rounded w-48 mx-auto mb-2"></div>
@@ -215,7 +220,7 @@ export function AreasPage() {
           </div>
         </div>
       ) : areas.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center shadow-soft">
+        <div className="p-12 text-center">
           <Target className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No areas yet</h3>
           <p className="text-gray-600 mb-6">Create areas to organize your outcomes and goals</p>
@@ -270,16 +275,18 @@ export function AreasPage() {
                       />
                     </div>
 
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(area)}
-                        className="p-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md text-gray-700 hover:text-blue-600 transition-colors"
+                        className="p-2 bg-blue-500 rounded-lg shadow-md text-white hover:bg-blue-600 transition-colors"
+                        title="Edit area"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(area.id)}
-                        className="p-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md text-gray-700 hover:text-red-600 transition-colors"
+                        className="p-2 bg-red-500 rounded-lg shadow-md text-white hover:bg-red-600 transition-colors"
+                        title="Delete area"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -328,6 +335,8 @@ export function AreasPage() {
           })}
         </div>
       )}
+        </div>
+      </div>
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={() => setShowModal(false)}>
@@ -457,7 +466,6 @@ export function AreasPage() {
           </div>
         </div>
       )}
-      </div>
 
       {showImageModal && (
         <ImageUploadModal
