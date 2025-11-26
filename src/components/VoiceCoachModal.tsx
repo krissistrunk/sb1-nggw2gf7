@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Mic, Sparkles, MessageCircle, Loader, Volume2, VolumeX, Brain } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Mic, Sparkles, MessageCircle, Loader, Volume2, VolumeX, Brain, Activity, Clock } from 'lucide-react';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { aiService } from '../lib/ai-service';
 import { useKnowledge } from '../hooks/useKnowledge';
 import { useOrganization } from '../contexts/OrganizationContext';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import { RelevantKnowledgeSidebar } from './RelevantKnowledgeSidebar';
 
 type SessionType = 'PLANNING' | 'REFLECTION' | 'COACHING' | 'MOTIVATION' | 'CLARIFICATION';
@@ -14,6 +16,7 @@ interface Message {
   role: 'user' | 'coach';
   content: string;
   timestamp: Date;
+  isQuestion?: boolean;
 }
 
 interface VoiceCoachModalProps {
@@ -23,6 +26,12 @@ interface VoiceCoachModalProps {
   prompt?: string;
   contextData?: any;
   onComplete?: (transcript: string, insights: any) => void | Promise<void>;
+}
+
+interface UserVoiceSettings {
+  autoDelaySeconds: number;
+  silenceTimeout: number;
+  audioCuesEnabled: boolean;
 }
 
 export function VoiceCoachModal({
@@ -40,27 +49,122 @@ export function VoiceCoachModal({
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [extractingKnowledge, setExtractingKnowledge] = useState(false);
   const [relevantKnowledge, setRelevantKnowledge] = useState<any[]>([]);
+  const [questionCount, setQuestionCount] = useState(0);
+  const [autoRecordCountdown, setAutoRecordCountdown] = useState<number | null>(null);
+  const [isAutoRecording, setIsAutoRecording] = useState(false);
+  const [silenceDetectedWarning, setSilenceDetectedWarning] = useState(false);
+  const [userSettings, setUserSettings] = useState<UserVoiceSettings>({
+    autoDelaySeconds: 5,
+    silenceTimeout: 10,
+    audioCuesEnabled: false,
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const { extractKnowledgeFromSession } = useKnowledge();
   const { organization } = useOrganization();
+  const { user } = useAuth();
+
+  const handleSilenceDetected = useCallback(() => {
+    setSilenceDetectedWarning(true);
+    if (userSettings.audioCuesEnabled && audioRef.current) {
+      audioRef.current.play().catch(() => {});
+    }
+  }, [userSettings.audioCuesEnabled]);
 
   const {
     state,
     durationSeconds,
+    currentAudioLevel,
+    silenceDuration,
     startRecording,
     stopRecording,
     blobToBase64,
     isRecording,
-  } = useVoiceRecording({ maxDurationSeconds: 300 });
+  } = useVoiceRecording({
+    maxDurationSeconds: 300,
+    silenceThresholdSeconds: userSettings.silenceTimeout,
+    onSilenceDetected: handleSilenceDetected,
+  });
 
   const {
     speaking,
     supported: speechSupported,
     speak,
     cancel: cancelSpeech,
-    getPreferredVoice,
   } = useSpeechSynthesis({ autoSpeak });
+
+  useEffect(() => {
+    const loadUserSettings = async () => {
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('voice_coach_auto_delay_seconds, voice_coach_silence_timeout, voice_coach_audio_cues')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        setUserSettings({
+          autoDelaySeconds: data.voice_coach_auto_delay_seconds || 5,
+          silenceTimeout: data.voice_coach_silence_timeout || 10,
+          audioCuesEnabled: data.voice_coach_audio_cues || false,
+        });
+      }
+    };
+
+    if (isOpen) {
+      loadUserSettings();
+    }
+  }, [isOpen, user]);
+
+  useEffect(() => {
+    if (userSettings.audioCuesEnabled) {
+      audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGmi77OScTgwPUKfh8LZjHAU7k9n0znkrBSh+zPLaizsKGGO36+mgUhQKRp/g8r5sHwUrgs/z2Yk2Bxpou+zknEsMD1Cn4fC2YxwFO5PZ9M55KwUofsz03Is7ChoAAAD//wAA');
+    }
+  }, [userSettings.audioCuesEnabled]);
+
+  const startAutoRecordCountdown = useCallback(() => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+    }
+
+    setAutoRecordCountdown(userSettings.autoDelaySeconds);
+
+    countdownTimerRef.current = setInterval(() => {
+      setAutoRecordCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          if (countdownTimerRef.current) {
+            clearInterval(countdownTimerRef.current);
+            countdownTimerRef.current = null;
+          }
+          setAutoRecordCountdown(null);
+          setIsAutoRecording(true);
+          startRecording();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [userSettings.autoDelaySeconds, startRecording]);
+
+  const cancelAutoRecordCountdown = useCallback(() => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setAutoRecordCountdown(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen && prompt) {
@@ -69,23 +173,44 @@ export function VoiceCoachModal({
         role: 'coach',
         content: prompt,
         timestamp: new Date(),
+        isQuestion: prompt.includes('?'),
       };
       setMessages([welcomeMessage]);
+      setQuestionCount(welcomeMessage.isQuestion ? 1 : 0);
 
       if (autoSpeak && speechSupported) {
-        setTimeout(() => speak(prompt), 500);
+        setTimeout(() => {
+          speak(prompt, () => {
+            startAutoRecordCountdown();
+          });
+        }, 500);
+      } else {
+        startAutoRecordCountdown();
       }
     }
-  }, [isOpen, prompt, autoSpeak, speechSupported, speak]);
+  }, [isOpen, prompt, autoSpeak, speechSupported, speak, startAutoRecordCountdown]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!isRecording && silenceDetectedWarning) {
+      setSilenceDetectedWarning(false);
+    }
+  }, [isRecording, silenceDetectedWarning]);
+
+  const detectIfQuestion = (text: string): boolean => {
+    const questionWords = ['what', 'why', 'how', 'when', 'where', 'who', 'which', 'would', 'could', 'can', 'do', 'does', 'is', 'are'];
+    const lowerText = text.toLowerCase().trim();
+    return lowerText.includes('?') || questionWords.some(word => lowerText.startsWith(word + ' '));
+  };
+
   const handleRecordingComplete = async (audioUrl: string, blob: Blob, duration: number) => {
     try {
       setIsTranscribing(true);
       setError(null);
+      setIsAutoRecording(false);
 
       const base64Audio = await blobToBase64(blob);
 
@@ -102,32 +227,59 @@ export function VoiceCoachModal({
       setMessages(updatedMessages);
       setCurrentTranscript(result.transcript);
 
+      const userMessages = updatedMessages.filter(m => m.role === 'user');
+      const recentCoachMessages = updatedMessages.filter(m => m.role === 'coach').slice(-5);
+      const recentQuestionCount = recentCoachMessages.filter(m => m.isQuestion).length;
+
       const conversationHistory = updatedMessages.map((msg) => ({
         role: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content,
       }));
 
+      const contextWithQuestionCount = {
+        ...contextData,
+        questionCount: recentQuestionCount,
+        totalUserMessages: userMessages.length,
+      };
+
       const coachResponse = await aiService.coachingResponse(
         sessionType,
         result.transcript,
         conversationHistory,
-        contextData
+        contextWithQuestionCount
       );
 
       if (coachResponse.relevantKnowledge && coachResponse.relevantKnowledge.length > 0) {
         setRelevantKnowledge(coachResponse.relevantKnowledge);
       }
 
+      const isQuestion = detectIfQuestion(coachResponse.response);
+
       const coachMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'coach',
         content: coachResponse.response,
         timestamp: new Date(),
+        isQuestion,
       };
-      setMessages((prev) => [...prev, coachMessage]);
+
+      const newMessages = [...updatedMessages, coachMessage];
+      setMessages(newMessages);
+
+      if (isQuestion) {
+        setQuestionCount(prev => prev + 1);
+      } else {
+        setQuestionCount(0);
+      }
 
       if (autoSpeak && speechSupported) {
-        setTimeout(() => speak(coachResponse.response), 300);
+        setTimeout(() => {
+          speak(coachResponse.response, () => {
+            startAutoRecordCountdown();
+          });
+        }, 300);
+      } else {
+        startAutoRecordCountdown();
       }
 
       setIsTranscribing(false);
@@ -135,10 +287,13 @@ export function VoiceCoachModal({
       const message = err instanceof Error ? err.message : 'Failed to process recording';
       setError(message);
       setIsTranscribing(false);
+      setIsAutoRecording(false);
     }
   };
 
   const handleComplete = async () => {
+    cancelAutoRecordCountdown();
+
     if (messages.length > 2) {
       setExtractingKnowledge(true);
       try {
@@ -169,6 +324,7 @@ export function VoiceCoachModal({
         sessionType,
         totalMessages: messages.length,
         userMessages: messages.filter((m) => m.role === 'user').length,
+        questionCount,
       };
       onComplete(currentTranscript, insights);
     }
@@ -176,11 +332,33 @@ export function VoiceCoachModal({
   };
 
   const handleClose = () => {
+    cancelAutoRecordCountdown();
     cancelSpeech();
     setMessages([]);
     setCurrentTranscript('');
     setError(null);
+    setQuestionCount(0);
+    setIsAutoRecording(false);
     onClose();
+  };
+
+  const handleManualRecord = async () => {
+    cancelAutoRecordCountdown();
+
+    if (isRecording) {
+      const result = await stopRecording();
+      if (result) {
+        await handleRecordingComplete(
+          result.audioUrl,
+          result.blob,
+          result.durationSeconds
+        );
+      }
+    } else if (!isTranscribing) {
+      cancelSpeech();
+      setIsAutoRecording(false);
+      await startRecording();
+    }
   };
 
   const formatTime = (seconds: number): string => {
@@ -202,6 +380,8 @@ export function VoiceCoachModal({
 
   if (!isOpen) return null;
 
+  const showSilenceWarning = isRecording && silenceDuration >= 7;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
       <div className="w-full max-w-3xl h-[90vh] bg-gradient-to-br from-primary-50 to-purple-50 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
@@ -216,6 +396,11 @@ export function VoiceCoachModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {questionCount > 0 && (
+              <div className="px-3 py-1 bg-blue-50 text-blue-700 text-xs rounded-full font-medium">
+                {questionCount} question{questionCount !== 1 ? 's' : ''} deep
+              </div>
+            )}
             {speechSupported && (
               <button
                 onClick={() => setAutoSpeak(!autoSpeak)}
@@ -316,11 +501,18 @@ export function VoiceCoachModal({
         <div className="bg-white border-t border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-gray-600">
-              {isRecording
-                ? 'Speak naturally, the coach is listening...'
-                : 'Press the microphone to start speaking'}
+              {autoRecordCountdown !== null ? (
+                <span className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-500" />
+                  Coach will listen in {autoRecordCountdown}s...
+                </span>
+              ) : isRecording ? (
+                isAutoRecording ? 'Auto-recording: Speak naturally...' : 'Recording: Speak naturally...'
+              ) : (
+                'Press the microphone to start speaking'
+              )}
             </p>
-            {messages.length > 1 && !isRecording && !isTranscribing && (
+            {messages.length > 1 && !isRecording && !isTranscribing && autoRecordCountdown === null && (
               <button
                 onClick={handleComplete}
                 disabled={extractingKnowledge}
@@ -338,24 +530,50 @@ export function VoiceCoachModal({
             )}
           </div>
 
+          {autoRecordCountdown !== null && (
+            <div className="mb-4 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative w-16 h-16">
+                  <svg className="transform -rotate-90 w-16 h-16">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      className="text-gray-200"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      strokeDasharray={`${2 * Math.PI * 28}`}
+                      strokeDashoffset={`${2 * Math.PI * 28 * (1 - autoRecordCountdown / userSettings.autoDelaySeconds)}`}
+                      className="text-blue-500 transition-all duration-1000"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xl font-bold text-blue-600">{autoRecordCountdown}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={cancelAutoRecordCountdown}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  Skip countdown
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-center gap-4">
             <button
-              onClick={async () => {
-                if (isRecording) {
-                  const result = await stopRecording();
-                  if (result) {
-                    await handleRecordingComplete(
-                      result.audioUrl,
-                      result.blob,
-                      result.durationSeconds
-                    );
-                  }
-                } else if (!isTranscribing) {
-                  cancelSpeech();
-                  await startRecording();
-                }
-              }}
-              disabled={isTranscribing}
+              onClick={handleManualRecord}
+              disabled={isTranscribing || autoRecordCountdown !== null}
               className={`
                 w-20 h-20 rounded-full
                 flex items-center justify-center
@@ -364,7 +582,9 @@ export function VoiceCoachModal({
                 relative
                 ${
                   isRecording
-                    ? 'bg-red-500 hover:bg-red-600'
+                    ? isAutoRecording
+                      ? 'bg-blue-500 hover:bg-blue-600'
+                      : 'bg-red-500 hover:bg-red-600'
                     : 'bg-gradient-to-br from-primary-500 to-purple-500 hover:from-primary-600 hover:to-purple-600'
                 }
                 text-white
@@ -372,7 +592,7 @@ export function VoiceCoachModal({
               `}
             >
               {isRecording && (
-                <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                <div className={`absolute inset-0 ${isAutoRecording ? 'bg-blue-500' : 'bg-red-500'} rounded-full animate-ping opacity-75`}></div>
               )}
               {isTranscribing ? (
                 <Loader className="w-10 h-10 animate-spin relative z-10" />
@@ -383,13 +603,33 @@ export function VoiceCoachModal({
           </div>
 
           {isRecording && (
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                <span className="text-sm font-mono text-red-700 font-medium">
-                  {formatTime(durationSeconds)}
-                </span>
+            <div className="mt-4 flex flex-col items-center gap-3">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-mono text-red-700 font-medium">
+                    {formatTime(durationSeconds)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-gray-500" />
+                  <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 transition-all duration-100"
+                      style={{ width: `${currentAudioLevel}%` }}
+                    />
+                  </div>
+                </div>
               </div>
+
+              {showSilenceWarning && (
+                <div className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-xs text-yellow-700">
+                    Silence detected ({silenceDuration}s) - Recording will stop at {userSettings.silenceTimeout}s
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

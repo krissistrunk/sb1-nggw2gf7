@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Building, Calendar, Save, LogOut, Volume2, Play, Loader } from 'lucide-react';
+import { User, Mail, Building, Calendar, Save, LogOut, Volume2, Play, Loader, Mic } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { supabase } from '../lib/supabase';
@@ -22,6 +22,11 @@ export function ProfilePage() {
     pitch: 1.0,
     volume: 1.0,
   });
+  const [voiceCoachSettings, setVoiceCoachSettings] = useState({
+    auto_delay_seconds: 5,
+    silence_timeout: 10,
+    audio_cues: false,
+  });
   const [testingVoice, setTestingVoice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,7 +39,7 @@ export function ProfilePage() {
     try {
       const { data } = await supabase
         .from('users')
-        .select('full_name, email, voice_settings')
+        .select('full_name, email, voice_settings, voice_coach_auto_delay_seconds, voice_coach_silence_timeout, voice_coach_audio_cues')
         .eq('id', user?.id)
         .maybeSingle();
 
@@ -46,6 +51,11 @@ export function ProfilePage() {
         if (data.voice_settings) {
           setVoiceSettings(data.voice_settings);
         }
+        setVoiceCoachSettings({
+          auto_delay_seconds: data.voice_coach_auto_delay_seconds || 5,
+          silence_timeout: data.voice_coach_silence_timeout || 10,
+          audio_cues: data.voice_coach_audio_cues || false,
+        });
       } else {
         setFormData({
           full_name: '',
@@ -68,6 +78,9 @@ export function ProfilePage() {
         .update({
           full_name: formData.full_name,
           voice_settings: voiceSettings,
+          voice_coach_auto_delay_seconds: voiceCoachSettings.auto_delay_seconds,
+          voice_coach_silence_timeout: voiceCoachSettings.silence_timeout,
+          voice_coach_audio_cues: voiceCoachSettings.audio_cues,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user?.id);
@@ -371,6 +384,84 @@ export function ProfilePage() {
               <span>Quiet</span>
               <span>Loud</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 shadow-soft">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
+          <Mic className="w-6 h-6 text-primary-500" />
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Voice Coach Interaction</h2>
+            <p className="text-sm text-gray-600">Configure microphone and conversation behavior</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Auto-Activation Delay: {voiceCoachSettings.auto_delay_seconds} seconds
+            </label>
+            <p className="text-xs text-gray-600 mb-3">
+              Time to wait after coach finishes speaking before automatically activating your microphone
+            </p>
+            <input
+              type="range"
+              min="3"
+              max="10"
+              step="1"
+              value={voiceCoachSettings.auto_delay_seconds}
+              onChange={(e) => setVoiceCoachSettings({ ...voiceCoachSettings, auto_delay_seconds: parseInt(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Quick (3s)</span>
+              <span>Slower (10s)</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Silence Timeout: {voiceCoachSettings.silence_timeout} seconds
+            </label>
+            <p className="text-xs text-gray-600 mb-3">
+              Automatically stop recording after this many seconds of silence
+            </p>
+            <input
+              type="range"
+              min="5"
+              max="30"
+              step="5"
+              value={voiceCoachSettings.silence_timeout}
+              onChange={(e) => setVoiceCoachSettings({ ...voiceCoachSettings, silence_timeout: parseInt(e.target.value) })}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Short (5s)</span>
+              <span>Long (30s)</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+            <div className="flex-1">
+              <div className="font-semibold text-gray-900 mb-1">Audio Cues</div>
+              <div className="text-xs text-gray-600">
+                Play a sound when recording stops automatically due to silence
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVoiceCoachSettings({ ...voiceCoachSettings, audio_cues: !voiceCoachSettings.audio_cues })}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                voiceCoachSettings.audio_cues ? 'bg-primary-500' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  voiceCoachSettings.audio_cues ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
         </div>
       </div>

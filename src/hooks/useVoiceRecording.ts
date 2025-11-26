@@ -7,6 +7,9 @@ export type RecordingState = 'idle' | 'requesting_permission' | 'recording' | 'p
 export interface VoiceRecordingOptions {
   maxDurationSeconds?: number;
   mimeType?: string;
+  silenceThresholdSeconds?: number;
+  silenceDecibelThreshold?: number;
+  onSilenceDetected?: () => void;
 }
 
 export interface VoiceRecordingResult {
@@ -21,16 +24,25 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [currentAudioLevel, setCurrentAudioLevel] = useState<number>(0);
+  const [silenceDuration, setSilenceDuration] = useState<number>(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const silenceStartTimeRef = useRef<number | null>(null);
 
   const {
     maxDurationSeconds = 300,
     mimeType = 'audio/webm;codecs=opus',
+    silenceThresholdSeconds = 10,
+    silenceDecibelThreshold = -40,
+    onSilenceDetected,
   } = options;
 
   const checkMicrophonePermission = useCallback(async () => {
@@ -61,6 +73,89 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
       return false;
     }
   }, []);
+
+  const cleanupAudioAnalysis = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+    silenceStartTimeRef.current = null;
+    setSilenceDuration(0);
+    setCurrentAudioLevel(0);
+  }, []);
+
+  const analyzeAudioLevels = useCallback(() => {
+    if (!analyserRef.current) return;
+
+    const analyser = analyserRef.current;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const checkAudioLevel = () => {
+      if (!analyserRef.current || state !== 'recording') {
+        return;
+      }
+
+      analyser.getByteFrequencyData(dataArray);
+
+      const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+      const decibels = 20 * Math.log10(average / 255);
+
+      setCurrentAudioLevel(Math.max(0, Math.min(100, (average / 255) * 100)));
+
+      const isSilent = decibels < silenceDecibelThreshold;
+
+      if (isSilent) {
+        if (silenceStartTimeRef.current === null) {
+          silenceStartTimeRef.current = Date.now();
+        }
+
+        const silenceDurationMs = Date.now() - silenceStartTimeRef.current;
+        const silenceDurationSec = Math.floor(silenceDurationMs / 1000);
+        setSilenceDuration(silenceDurationSec);
+
+        if (silenceDurationSec >= silenceThresholdSeconds) {
+          if (onSilenceDetected) {
+            onSilenceDetected();
+          }
+          stopRecording();
+          return;
+        }
+      } else {
+        silenceStartTimeRef.current = null;
+        setSilenceDuration(0);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
+    };
+
+    checkAudioLevel();
+  }, [state, silenceThresholdSeconds, silenceDecibelThreshold, onSilenceDetected]);
+
+  const setupAudioAnalysis = useCallback((stream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
+      microphone.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      analyzeAudioLevels();
+    } catch (err) {
+      console.error('Failed to setup audio analysis:', err);
+    }
+  }, [analyzeAudioLevels]);
 
   const startRecording = useCallback(async (): Promise<boolean> => {
     setError(null);
@@ -117,6 +212,10 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
       setState('recording');
       startTimeRef.current = Date.now();
       setDurationSeconds(0);
+      setSilenceDuration(0);
+      silenceStartTimeRef.current = null;
+
+      setupAudioAnalysis(stream);
 
       timerRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -136,7 +235,7 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
       setPermissionGranted(false);
       return false;
     }
-  }, [mimeType, maxDurationSeconds]);
+  }, [mimeType, maxDurationSeconds, setupAudioAnalysis]);
 
   const stopRecording = useCallback((): Promise<VoiceRecordingResult | null> => {
     return new Promise((resolve) => {
@@ -155,6 +254,8 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
       setState('processing');
 
       mediaRecorder.onstop = () => {
+        cleanupAudioAnalysis();
+
         const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         const audioUrl = URL.createObjectURL(audioBlob);
         const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -174,9 +275,11 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
 
       mediaRecorder.stop();
     });
-  }, []);
+  }, [cleanupAudioAnalysis]);
 
   const cancelRecording = useCallback(() => {
+    cleanupAudioAnalysis();
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -195,7 +298,7 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
     setState('idle');
     setDurationSeconds(0);
     setError(null);
-  }, []);
+  }, [cleanupAudioAnalysis]);
 
   const uploadRecording = useCallback(
     async (blob: Blob): Promise<string | null> => {
@@ -255,6 +358,8 @@ export function useVoiceRecording(options: VoiceRecordingOptions = {}) {
     error,
     durationSeconds,
     permissionGranted,
+    currentAudioLevel,
+    silenceDuration,
     checkMicrophonePermission,
     requestMicrophonePermission,
     startRecording,
