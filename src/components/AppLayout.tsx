@@ -1,8 +1,9 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Target, Calendar, Layers, User, Mic, Lightbulb, Sun, Moon, Compass, TrendingUp, Sparkles, Menu, X, Brain } from 'lucide-react';
+import { Target, Calendar, Layers, User, Mic, Lightbulb, Sun, Moon, Compass, TrendingUp, Sparkles, Menu, X, Brain, AlertCircle } from 'lucide-react';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { useAuth } from '../hooks/useAuth';
+import { USE_MOCK_DATA } from '../lib/supabase';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -309,6 +310,24 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </div>
         </>
+      )}
+
+      {USE_MOCK_DATA && (
+        <div className="bg-gradient-to-r from-yellow-400 to-amber-500 border-b border-yellow-600">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-2 sm:py-3">
+            <div className="flex items-center gap-2 sm:gap-3 text-yellow-900">
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-semibold">
+                  🎭 Demo Mode - Using Mock Data
+                </p>
+                <p className="text-[10px] sm:text-xs mt-0.5 hidden sm:block">
+                  Database not connected. Set VITE_USE_MOCK_DATA=false in .env to connect to Supabase.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 pb-20 md:pb-8">

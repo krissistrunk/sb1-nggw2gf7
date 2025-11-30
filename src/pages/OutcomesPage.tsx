@@ -446,9 +446,9 @@ export function OutcomesPage() {
                 />
               </div>
 
-              <div>
+              <div className="p-4 bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 rounded-xl">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Purpose</label>
+                  <label className="block text-lg font-bold text-red-700">YOUR WHY (The Emotional Fuel)</label>
                   {formData.title && formData.purpose && (
                     <AIPurposeRefinement
                       title={formData.title}
@@ -458,14 +458,34 @@ export function OutcomesPage() {
                     />
                   )}
                 </div>
+                <div className="mb-3 p-3 bg-white bg-opacity-70 rounded-lg">
+                  <p className="text-sm text-red-700 font-semibold mb-2">
+                    ⚡ This is the MOST IMPORTANT field - Tony Robbins' RPM
+                  </p>
+                  <p className="text-xs text-gray-700 mb-2">
+                    Without a compelling purpose, you won't follow through. Your purpose provides the emotional fuel to take action.
+                  </p>
+                  <p className="text-xs font-semibold text-gray-800">Answer these questions:</p>
+                  <ul className="text-xs text-gray-700 list-disc list-inside space-y-0.5 ml-2 mt-1">
+                    <li>Why is this a MUST for you?</li>
+                    <li>What will achieving this give you emotionally?</li>
+                    <li>How will you feel when you accomplish this?</li>
+                    <li>What will NOT achieving this cost you?</li>
+                  </ul>
+                </div>
                 <textarea
                   value={formData.purpose}
                   onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Why is this outcome important to you?"
-                  rows={2}
+                  className="w-full px-4 py-3 border-2 border-red-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white"
+                  placeholder="I must achieve this because... When I accomplish this I will feel... This will give me... Not doing this will cost me..."
+                  rows={5}
                   required
                 />
+                {!formData.purpose && (
+                  <p className="text-xs text-red-600 mt-2 font-medium">
+                    💡 Take a moment to really think about your WHY. This determines your success.
+                  </p>
+                )}
               </div>
 
               <div>
