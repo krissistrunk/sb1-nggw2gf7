@@ -24,6 +24,7 @@ This document tracks issues encountered and their resolutions to prevent repeati
 
 | Date | Issue | Root Cause | Fix | Reference |
 |------|-------|------------|-----|-----------|
+| 2025-12-14 | Docker migrations fail | Missing base schema, duplicate migrations | Created 20251001000000_create_base_schema.sql, removed duplicates | This file |
 | 2025-12-14 | Mock mode "Failed to fetch" | useAuth.ts always called Supabase | Added isMockMode() check, use MockAuth | src/hooks/useAuth.ts |
 | 2025-12-14 | Mock mode not detected | .env.local overrides .env | Set VITE_USE_MOCK_DATA=true in .env.local | .env.local |
 | 2025-12-14 | Org not loaded in mock mode | OrganizationContext called Supabase | Added mock data support | src/contexts/OrganizationContext.tsx |
@@ -89,6 +90,47 @@ This document tracks issues encountered and their resolutions to prevent repeati
 - Voice coaching UI may not be fully wired
 - WeeklyReflectionPage exists but may be unrouted
 - Mock data infrastructure partially implemented
+
+---
+
+## Docker Supabase Setup (Fixed 2025-12-14)
+
+### Problem
+Migrations from github-ene expected tables to exist before ALTER TABLE commands ran.
+
+### Solution
+1. **Created base schema migration**: `20251001000000_create_base_schema.sql`
+   - Creates all foundational tables: users, areas, outcomes, actions, weekly_plans, daily_notes, voice_sessions
+   - Must have earliest timestamp to run first
+
+2. **Fixed voice_sessions schema**
+   - Changed `status` column to `session_type`
+   - Changed `parsed_data` to `ai_insights`
+   - Added `duration_seconds`
+
+3. **Removed duplicate migrations**
+   - Files with double timestamps (e.g., `20251207100308_20251006120000_*.sql`)
+   - These were copies that caused "policy already exists" errors
+
+### Commands to Set Up Fresh Docker Supabase
+```bash
+# Stop any existing containers
+docker ps -a --filter "name=supabase" -q | xargs -r docker rm -f
+
+# Initialize (if no config.toml exists)
+cd /path/to/project
+supabase init
+
+# Start Supabase (applies all migrations)
+supabase start
+
+# Verify
+curl http://localhost:54321/auth/v1/health
+```
+
+### Current Working Migration Count
+- 40 migrations after duplicate removal
+- All 26 tables created successfully
 
 ---
 

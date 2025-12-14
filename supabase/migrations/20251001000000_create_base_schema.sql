@@ -236,9 +236,10 @@ CREATE POLICY "Users can manage their own daily notes"
 CREATE TABLE IF NOT EXISTS voice_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_type text DEFAULT 'COACHING' CHECK (session_type IN ('PLANNING', 'COACHING', 'REFLECTION', 'MOTIVATION', 'CLARIFICATION')),
   transcript text,
-  parsed_data jsonb DEFAULT '{}'::jsonb,
-  status text DEFAULT 'processing' CHECK (status IN ('processing', 'completed', 'failed')),
+  ai_insights jsonb DEFAULT '[]'::jsonb,
+  duration_seconds integer DEFAULT 0,
   created_at timestamptz DEFAULT now()
 );
 
