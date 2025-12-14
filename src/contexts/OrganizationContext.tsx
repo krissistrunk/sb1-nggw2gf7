@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Organization } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
+import { isMockMode, MockAuth, getMockOrganizationById } from '../lib/mock-data';
 
 interface OrganizationContextType {
   organization: Organization | null;
@@ -13,21 +14,11 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [loading, setLoading] = useState(true);
+  const useMock = isMockMode();
 
   useEffect(() => {
     loadOrganization();
-
-    // Listen for auth state changes to reload organization
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
-        loadOrganization();
-      } else if (event === 'SIGNED_OUT') {
-        setOrganization(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  }, [useMock]);
 
   useEffect(() => {
     if (organization) {
@@ -36,8 +27,22 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, [organization]);
 
   const loadOrganization = async () => {
-    setLoading(true);
     try {
+      if (useMock) {
+        // Mock mode: use MockAuth and mock organization data
+        const currentUser = MockAuth.currentUser;
+        if (currentUser?.organization_id) {
+          const mockOrg = getMockOrganizationById(currentUser.organization_id);
+          if (mockOrg) {
+            // Convert to Organization type format
+            setOrganization(mockOrg as unknown as Organization);
+          }
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Real mode: use Supabase
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {

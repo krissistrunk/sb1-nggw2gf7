@@ -8,6 +8,7 @@ import type { OutcomeTemplate, Area } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { OUTCOME_STATUS } from '../constants/status';
 
 export function TemplatesPage() {
   const { user } = useAuth();
@@ -15,6 +16,7 @@ export function TemplatesPage() {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<OutcomeTemplate[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [selectedAreaId, setSelectedAreaId] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -41,6 +43,12 @@ export function TemplatesPage() {
     loadData();
   }, [user, organization]);
 
+  useEffect(() => {
+    if (!selectedAreaId && areas.length > 0) {
+      setSelectedAreaId(areas[0].id);
+    }
+  }, [areas, selectedAreaId]);
+  
   const loadData = async () => {
     if (!user || !organization) return;
 
@@ -74,15 +82,26 @@ export function TemplatesPage() {
   const applyTemplate = async (template: OutcomeTemplate) => {
     if (!user || !organization) return;
 
+    if (areas.length === 0) {
+      alert('Please create an area before applying a template.');
+      return;
+    }
+
+    if (!selectedAreaId) {
+      alert('Select an area to use for this outcome before applying a template.');
+      return;
+    }
+    
     setApplying(template.id);
 
     try {
       const newOutcome = {
         user_id: user.id,
         organization_id: organization.id,
+        area_id: selectedAreaId,
         title: template.outcome_title,
         purpose: template.purpose,
-        status: 'ACTIVE' as const,
+        status: OUTCOME_STATUS.ACTIVE,
         is_draft: true,
       };
 
@@ -235,6 +254,24 @@ export function TemplatesPage() {
               placeholder="Search templates..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+          </div>
+
+          <div className="flex flex-wrap gap-3 items-center">
+            <label className="text-sm font-medium text-gray-700">Apply templates to area:</label>
+            <select
+              value={selectedAreaId}
+              onChange={(e) => setSelectedAreaId(e.target.value)}
+              className="min-w-[220px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {areas.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+            {areas.length === 0 && (
+              <div className="text-sm text-red-600">Create an area first to apply templates.</div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

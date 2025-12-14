@@ -1,29 +1,36 @@
 import { useState, useEffect } from 'react';
-import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, Trash2, Package, Edit2, Archive, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
+import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, User, Trash2, Package, Edit2, Archive, ChevronDown, ChevronUp, Lightbulb, ExternalLink, ArrowRight } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { useActions } from '../hooks/useActions';
 import { DraggableActionItem } from '../components/DraggableActionItem';
-import type { OutcomeWithRelations, Action, InboxItem, Area, Outcome } from '../lib/database.types';
+import type { OutcomeWithRelations, DailyNote, Action, InboxItem, ChunkWithItems, Area, Goal } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
 import { useChunks } from '../hooks/useChunks';
 import { AIChunkSuggestions } from '../components/AIChunkSuggestions';
 import { VoiceCoachButton } from '../components/VoiceCoachButton';
+import { ChunkToOutcomeModal } from '../components/ChunkToOutcomeModal';
 import { aiService } from '../lib/ai-service';
+import { GOAL_STATUS, OUTCOME_STATUS } from '../constants/status';
 
 type PlanningStep = 'welcome' | 'capture' | 'organize' | 'review-outcomes' | 'select-focus' | 'set-purpose' | 'plan-actions' | 'commit';
+
+type ViewMode = 'chunks' | 'outcomes' | 'both';
 
 export function DailyPlanningPage() {
   const { user } = useAuth();
   const { organization } = useOrganization();
+  const navigate = useNavigate();
   const { deleteAction, reorderActions } = useActions();
   const {
     chunks,
+    loading: chunksLoading,
     createChunk,
     updateChunk,
     deleteChunk,
@@ -57,6 +64,7 @@ export function DailyPlanningPage() {
   const [editActionTitle, setEditActionTitle] = useState('');
   const [editActionDuration, setEditActionDuration] = useState(30);
   const [mustActions, setMustActions] = useState<Set<string>>(new Set());
+  const [delegatedActions, setDelegatedActions] = useState<Record<string, string>>({});
   const [capturedItems, setCapturedItems] = useState<string[]>([]);
   const [capturedItemsData, setCapturedItemsData] = useState<InboxItem[]>([]);
   const [draggedItem, setDraggedItem] = useState<InboxItem | null>(null);
@@ -67,6 +75,13 @@ export function DailyPlanningPage() {
   const [editActionDelegatedTo, setEditActionDelegatedTo] = useState('');
   const [newActionDelegatedTo, setNewActionDelegatedTo] = useState('');
   const [showImageModal, setShowImageModal] = useState(false);
+  const [editingCapturedItem, setEditingCapturedItem] = useState<string | null>(null);
+  const [editCapturedContent, setEditCapturedContent] = useState('');
+  const [dragOverChunk, setDragOverChunk] = useState<string | null>(null);
+  const [reviewViewMode, setReviewViewMode] = useState<ViewMode>('both');
+  const [selectedChunkForConversion, setSelectedChunkForConversion] = useState<ChunkWithItems | null>(null);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const {
     getBackgroundUrl,
     getBackgroundPosition,
@@ -86,21 +101,20 @@ export function DailyPlanningPage() {
   useEffect(() => {
     if (user && organization) {
       loadData();
+      loadAreasAndGoals();
     }
   }, [user, organization]);
 
   const loadData = async () => {
     try {
-      const userId = user?.id;
-      const organizationId = organization?.id;
-      if (!userId || !organizationId) return;
-
       const { data: outcomesData } = await supabase
         .from('outcomes')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
-        .eq('status', 'ACTIVE')
+        .select(`
+          *,
+          areas (*)
+        `)
+        .eq('user_id', user?.id)
+        .eq('status', OUTCOME_STATUS.ACTIVE)
         .order('created_at', { ascending: false });
 
       if (!outcomesData) {
@@ -119,39 +133,26 @@ export function DailyPlanningPage() {
         .order('sort_order', { ascending: true });
 
       // Group actions by outcome_id
-      const actionsByOutcome: Record<string, Action[]> = {};
+      const actionsByOutcome: Record<string, typeof allActionsData> = {};
       (allActionsData || []).forEach(action => {
         if (!actionsByOutcome[action.outcome_id]) {
           actionsByOutcome[action.outcome_id] = [];
         }
-        actionsByOutcome[action.outcome_id]!.push(action);
+        actionsByOutcome[action.outcome_id].push(action);
       });
 
-      const areaIds = Array.from(
-        new Set(outcomesData.map((o) => o.area_id).filter((id): id is string => Boolean(id)))
-      );
-      const { data: areasData, error: areasError } = areaIds.length
-        ? await supabase.from('areas').select('*').in('id', areaIds)
-        : { data: [] as Area[], error: null };
-
-      if (areasError) throw areasError;
-
-      const areasById = new Map<string, Area>((areasData || []).map((a) => [a.id, a]));
-
-      const outcomesWithActions: OutcomeWithRelations[] = (outcomesData as Outcome[]).map((outcome) => ({
+      // Combine outcomes with their actions
+      const outcomesWithActions = outcomesData.map(outcome => ({
         ...outcome,
-        area: outcome.area_id ? areasById.get(outcome.area_id) || null : null,
-        goal: null,
         actions: actionsByOutcome[outcome.id] || [],
-      }));
+      } as OutcomeWithRelations));
 
       setOutcomes(outcomesWithActions);
 
       const { data: actionIdeasData } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
         .eq('item_type', 'ACTION_IDEA')
         .eq('triaged', false)
         .order('created_at', { ascending: false });
@@ -161,8 +162,7 @@ export function DailyPlanningPage() {
       const { data: dailyNoteData } = await supabase
         .from('daily_notes')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
         .eq('date', today)
         .maybeSingle();
 
@@ -174,6 +174,29 @@ export function DailyPlanningPage() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAreasAndGoals = async () => {
+    try {
+      const { data: areasData } = await supabase
+        .from('areas')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('name');
+
+      setAreas(areasData || []);
+
+      const { data: goalsData } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('status', GOAL_STATUS.ACTIVE)
+        .order('created_at', { ascending: false });
+
+      setGoals(goalsData || []);
+    } catch (error) {
+      console.error('Error loading areas and goals:', error);
     }
   };
 
@@ -230,10 +253,26 @@ export function DailyPlanningPage() {
 
       setCapturedItemsData(capturedItemsData.filter(item => item.id !== draggedItem.id));
       setDraggedItem(null);
+      setDragOverChunk(null);
+
+      setExpandedChunks((prev) => {
+        const next = new Set(prev);
+        next.add(chunkId);
+        return next;
+      });
+
       await refreshChunks();
     } catch (error) {
       console.error('Error adding item to chunk:', error);
     }
+  };
+
+  const handleExpandAll = () => {
+    setExpandedChunks(new Set(chunks.map(c => c.id)));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedChunks(new Set());
   };
 
   const handleCreateChunk = async () => {
@@ -296,12 +335,56 @@ export function DailyPlanningPage() {
     }
   };
 
+  const handleStartEditCapturedItem = (item: InboxItem) => {
+    setEditingCapturedItem(item.id);
+    setEditCapturedContent(item.content);
+  };
+
+  const handleSaveEditCapturedItem = async (id: string) => {
+    if (!editCapturedContent.trim()) return;
+
+    try {
+      const { data } = await supabase
+        .from('inbox_items')
+        .update({ content: editCapturedContent.trim() })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (data) {
+        setCapturedItemsData(
+          capturedItemsData.map(item => item.id === id ? data : item)
+        );
+      }
+
+      setEditingCapturedItem(null);
+      setEditCapturedContent('');
+    } catch (error) {
+      console.error('Error updating captured item:', error);
+    }
+  };
+
+  const handleCancelEditCapturedItem = () => {
+    setEditingCapturedItem(null);
+    setEditCapturedContent('');
+  };
+
   useEffect(() => {
     if (currentStep === 'organize' && capturedItems.length > 0) {
       loadCapturedItems();
       refreshChunks();
     }
   }, [currentStep]);
+
+  const handleChunkConversionSuccess = async (outcomeId: string, shouldNavigate: boolean) => {
+    setSelectedChunkForConversion(null);
+    await loadData();
+    await refreshChunks();
+
+    if (shouldNavigate) {
+      navigate(`/outcomes/${outcomeId}`);
+    }
+  };
 
   const handleSelectOutcome = (outcome: OutcomeWithRelations) => {
     if (selectedOutcomes.find((o) => o.id === outcome.id)) {
@@ -333,10 +416,18 @@ export function DailyPlanningPage() {
     setMustActions(newMustActions);
   };
 
+  const handleDelegationChange = (actionId: string, delegatedTo: string) => {
+    if (delegatedTo.trim()) {
+      setDelegatedActions({ ...delegatedActions, [actionId]: delegatedTo });
+    } else {
+      const newDelegated = { ...delegatedActions };
+      delete newDelegated[actionId];
+      setDelegatedActions(newDelegated);
+    }
+  };
+
   const handleAddAction = async (outcomeId: string) => {
     if (!newActionTitle.trim()) return;
-    const userId = user?.id;
-    if (!userId) return;
 
     try {
       const outcome = outcomes.find((o) => o.id === outcomeId);
@@ -345,7 +436,7 @@ export function DailyPlanningPage() {
       const { data: newAction } = await supabase
         .from('actions')
         .insert({
-          user_id: userId,
+          user_id: user?.id,
           outcome_id: outcomeId,
           title: newActionTitle,
           duration_minutes: newActionDuration,
@@ -383,14 +474,11 @@ export function DailyPlanningPage() {
   };
 
   const handleConvertActionIdea = async (inboxItem: InboxItem, outcomeId: string) => {
-    const userId = user?.id;
-    if (!userId) return;
-
     try {
       const { data: newAction } = await supabase
         .from('actions')
         .insert({
-          user_id: userId,
+          user_id: user?.id,
           outcome_id: outcomeId,
           title: inboxItem.content,
           duration_minutes: 30,
@@ -568,17 +656,13 @@ export function DailyPlanningPage() {
   };
 
   const handleSaveDailyPlan = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     setSaving(true);
     try {
       const { data: existingNote } = await supabase
         .from('daily_notes')
         .select('id')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
+        .eq('organization_id', organization?.id)
         .eq('date', today)
         .maybeSingle();
 
@@ -592,8 +676,8 @@ export function DailyPlanningPage() {
           .eq('id', existingNote.id);
       } else {
         await supabase.from('daily_notes').insert({
-          user_id: userId,
-          organization_id: organizationId,
+          user_id: user?.id,
+          organization_id: organization?.id,
           date: today,
           morning_intention: morningIntention,
         });
@@ -730,7 +814,7 @@ export function DailyPlanningPage() {
           </div>
           <button
             onClick={() => setCurrentStep('capture')}
-            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
           >
             Begin Daily Planning
             <ChevronRight className="w-5 h-5" />
@@ -756,12 +840,8 @@ export function DailyPlanningPage() {
                 </p>
               </div>
               <VoiceCoachButton
-                onRecordingComplete={async (_audioUrl, blob, _durationSeconds) => {
+                onRecordingComplete={async (audioUrl, blob, durationSeconds) => {
                   try {
-                    const userId = user?.id;
-                    const organizationId = organization?.id;
-                    if (!userId || !organizationId) return;
-
                     const base64Audio = await new Promise<string>((resolve) => {
                       const reader = new FileReader();
                       reader.onloadend = () => {
@@ -776,8 +856,8 @@ export function DailyPlanningPage() {
                     if (result.items && result.items.length > 0) {
                       for (const item of result.items) {
                         const { data } = await supabase.from('inbox_items').insert({
-                          user_id: userId,
-                          organization_id: organizationId,
+                          user_id: user?.id,
+                          organization_id: organization?.id,
                           content: item.content,
                           item_type: item.type === 'ACTION' ? 'ACTION_IDEA' : item.type === 'OUTCOME' ? 'OUTCOME_IDEA' : 'NOTE',
                           triaged: false,
@@ -785,6 +865,7 @@ export function DailyPlanningPage() {
 
                         if (data) {
                           setCapturedItems((prev) => [...prev, data.id]);
+                          setCapturedItemsData((prev) => [...prev, data]);
                         }
                       }
                     }
@@ -806,13 +887,9 @@ export function DailyPlanningPage() {
               if (!newCaptureItem.trim()) return;
 
               try {
-                const userId = user?.id;
-                const organizationId = organization?.id;
-                if (!userId || !organizationId) return;
-
                 const { data } = await supabase.from('inbox_items').insert({
-                  user_id: userId,
-                  organization_id: organizationId,
+                  user_id: user?.id,
+                  organization_id: organization?.id,
                   content: newCaptureItem.trim(),
                   item_type: 'NOTE',
                   triaged: false,
@@ -820,6 +897,7 @@ export function DailyPlanningPage() {
 
                 if (data) {
                   setCapturedItems([...capturedItems, data.id]);
+                  setCapturedItemsData([...capturedItemsData, data]);
                   setNewCaptureItem('');
                 }
               } catch (error) {
@@ -848,11 +926,83 @@ export function DailyPlanningPage() {
             {capturedItems.length > 0 && (
               <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
                 <p className="text-sm text-green-800">
-                  <strong>{capturedItems.length} items captured!</strong> You can organize these in the next step.
+                  <strong>{capturedItems.length} items captured!</strong> You can review and edit them below.
                 </p>
               </div>
             )}
           </div>
+
+          {capturedItemsData.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Captured Items ({capturedItemsData.length})
+              </h3>
+              <div className="space-y-2">
+                {capturedItemsData.map((item) => {
+                  const isEditing = editingCapturedItem === item.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-xl border-2 border-gray-200 bg-white hover:border-primary-300 transition-colors"
+                    >
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={editCapturedContent}
+                            onChange={(e) => setEditCapturedContent(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-sm"
+                            rows={3}
+                            autoFocus
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSaveEditCapturedItem(item.id)}
+                              disabled={!editCapturedContent.trim()}
+                              className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={handleCancelEditCapturedItem}
+                              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <p className="text-sm text-gray-900">{item.content}</p>
+                            <span className="inline-block mt-2 px-2 py-1 text-xs font-medium rounded-lg bg-gray-100 text-gray-700">
+                              {item.item_type === 'ACTION_IDEA' ? 'Action Idea' : item.item_type === 'OUTCOME_IDEA' ? 'Outcome Idea' : 'Note'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleStartEditCapturedItem(item)}
+                              className="text-gray-400 hover:text-primary-600 transition-colors p-1"
+                              title="Edit item"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCapturedItem(item.id)}
+                              className="text-gray-400 hover:text-red-600 transition-colors p-1"
+                              title="Delete item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-sm text-blue-800">
@@ -875,7 +1025,7 @@ export function DailyPlanningPage() {
                   setCurrentStep('organize');
                 }
               }}
-              className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+              className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
             >
               {capturedItems.length === 0 ? 'Skip to Review Outcomes' : 'Continue to Organize'}
               <ChevronRight className="w-5 h-5" />
@@ -916,13 +1066,9 @@ export function DailyPlanningPage() {
               if (!newCaptureItem.trim()) return;
 
               try {
-                const userId = user?.id;
-                const organizationId = organization?.id;
-                if (!userId || !organizationId) return;
-
                 const { data } = await supabase.from('inbox_items').insert({
-                  user_id: userId,
-                  organization_id: organizationId,
+                  user_id: user?.id,
+                  organization_id: organization?.id,
                   content: newCaptureItem.trim(),
                   item_type: 'NOTE',
                   triaged: false,
@@ -958,7 +1104,25 @@ export function DailyPlanningPage() {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-900">Chunks</h3>
-                {editingChunk === 'new' ? (
+                <div className="flex items-center gap-2">
+                  {chunks.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={handleExpandAll}
+                        className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        Expand All
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        onClick={handleCollapseAll}
+                        className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        Collapse All
+                      </button>
+                    </div>
+                  )}
+                  {editingChunk === 'new' ? (
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -993,110 +1157,144 @@ export function DailyPlanningPage() {
                     New Chunk
                   </button>
                 )}
+                </div>
               </div>
 
               <div className="space-y-3">
-                {chunks.map((chunk) => (
-                  <div
-                    key={chunk.id}
-                    className="border-2 rounded-xl p-4"
-                    style={{ borderColor: chunk.color }}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDropOnChunk(chunk.id)}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        {editingChunk === chunk.id ? (
-                          <input
-                            type="text"
-                            defaultValue={chunk.name}
-                            onBlur={(e) => {
-                              if (e.target.value.trim()) {
-                                handleUpdateChunkName(chunk.id, e.target.value);
-                              } else {
-                                setEditingChunk(null);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.currentTarget.blur();
-                              }
-                            }}
-                            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold"
-                            autoFocus
-                          />
-                        ) : (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Package
-                              className="w-5 h-5 flex-shrink-0"
-                              style={{ color: chunk.color }}
-                            />
-                            <h4 className="font-semibold text-gray-900">{chunk.name}</h4>
-                            <span className="text-xs text-gray-500">
-                              ({chunk.items.length} items)
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setEditingChunk(chunk.id)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleChunkExpanded(chunk.id)}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
-                        >
-                          {expandedChunks.has(chunk.id) ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => archiveChunk(chunk.id)}
-                          className="p-1.5 text-gray-400 hover:text-orange-600 rounded"
-                        >
-                          <Archive className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteChunk(chunk.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                {chunks.map((chunk) => {
+                  const isExpanded = expandedChunks.has(chunk.id);
+                  const isDragOver = dragOverChunk === chunk.id;
+                  const previewItems = chunk.items.slice(0, 3);
 
-                    {expandedChunks.has(chunk.id) && (
-                      <div className="space-y-2 mt-3 pt-3 border-t">
-                        {chunk.items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="bg-gray-50 rounded-lg p-3 flex items-start justify-between"
+                  return (
+                    <div
+                      key={chunk.id}
+                      className={`border-2 rounded-xl p-4 transition-all ${
+                        isDragOver ? 'scale-105 shadow-lg' : ''
+                      }`}
+                      style={{
+                        borderColor: isDragOver ? '#3B82F6' : chunk.color,
+                        backgroundColor: isDragOver ? '#EFF6FF' : 'transparent'
+                      }}
+                      onDragOver={(e) => {
+                        handleDragOver(e);
+                        setDragOverChunk(chunk.id);
+                      }}
+                      onDragLeave={() => setDragOverChunk(null)}
+                      onDrop={() => handleDropOnChunk(chunk.id)}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          {editingChunk === chunk.id ? (
+                            <input
+                              type="text"
+                              defaultValue={chunk.name}
+                              onBlur={(e) => {
+                                if (e.target.value.trim()) {
+                                  handleUpdateChunkName(chunk.id, e.target.value);
+                                } else {
+                                  setEditingChunk(null);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Package
+                                className="w-5 h-5 flex-shrink-0"
+                                style={{ color: chunk.color }}
+                              />
+                              <h4 className="font-semibold text-gray-900">{chunk.name}</h4>
+                              <span className="text-xs text-gray-500">
+                                ({chunk.items.length} items)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEditingChunk(chunk.id)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
                           >
-                            <p className="text-sm text-gray-900 flex-1">
-                              {item.inbox_item.content}
-                            </p>
-                            <button
-                              onClick={() => handleRemoveFromChunk(item.id, item.inbox_item_id)}
-                              className="text-xs text-red-600 hover:text-red-700 ml-2"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                        {chunk.items.length === 0 && (
-                          <p className="text-sm text-gray-500 italic text-center py-2">
-                            Drag items here to add to this chunk
-                          </p>
-                        )}
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleChunkExpanded(chunk.id)}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 rounded"
+                          >
+                            {expandedChunks.has(chunk.id) ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => archiveChunk(chunk.id)}
+                            className="p-1.5 text-gray-400 hover:text-orange-600 rounded"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteChunk(chunk.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {!isExpanded && previewItems.length > 0 && (
+                        <div className="mt-3 pt-3 border-t space-y-1">
+                          {previewItems.map((item) => (
+                            <div
+                              key={item.id}
+                              className="text-xs text-gray-600 truncate"
+                            >
+                              • {item.inbox_item.content}
+                            </div>
+                          ))}
+                          {chunk.items.length > 3 && (
+                            <div className="text-xs text-gray-500 italic">
+                              + {chunk.items.length - 3} more items...
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {isExpanded && (
+                        <div className="space-y-2 mt-3 pt-3 border-t">
+                          {chunk.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="bg-gray-50 rounded-lg p-3 flex items-start justify-between"
+                            >
+                              <p className="text-sm text-gray-900 flex-1">
+                                {item.inbox_item.content}
+                              </p>
+                              <button
+                                onClick={() => handleRemoveFromChunk(item.id, item.inbox_item_id)}
+                                className="text-xs text-red-600 hover:text-red-700 ml-2"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          {chunk.items.length === 0 && (
+                            <p className="text-sm text-gray-500 italic text-center py-2">
+                              Drag items here to add to this chunk
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {chunks.length === 0 && (
                   <p className="text-center text-gray-500 italic py-4">
                     No chunks yet. Create one to group related items together.
@@ -1180,6 +1378,40 @@ export function DailyPlanningPage() {
               </div>
             )}
 
+            {chunks.length > 0 && (
+              <div className="mb-6 bg-gradient-to-r from-blue-50 to-primary-50 rounded-xl p-5 border-2 border-blue-200">
+                <div className="flex items-start gap-3">
+                  <Lightbulb className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-blue-900 mb-2">RPM Methodology: Next Step</h4>
+                    <p className="text-sm text-blue-800 mb-3">
+                      You've organized <strong>{chunks.length} chunk{chunks.length !== 1 ? 's' : ''}</strong> of related items. In RPM, each chunk represents a potential <strong>OUTCOME</strong> (a specific result you want to achieve).
+                    </p>
+                    <p className="text-sm text-blue-800 mb-3">
+                      In the next step, you can convert your chunks into formal outcomes with:
+                    </p>
+                    <ul className="text-sm text-blue-800 space-y-1 mb-3 ml-4">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">•</span>
+                        <span><strong>RESULT:</strong> What specific outcome you want</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">•</span>
+                        <span><strong>PURPOSE:</strong> Your compelling WHY (emotional fuel)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 mt-0.5">•</span>
+                        <span><strong>MASSIVE ACTION PLAN:</strong> High-leverage actions</span>
+                      </li>
+                    </ul>
+                    <p className="text-xs text-blue-700 italic">
+                      Your chunks will be available in the Review Outcomes step where you can convert them!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4">
               <button
                 onClick={() => setCurrentStep('capture')}
@@ -1189,7 +1421,7 @@ export function DailyPlanningPage() {
               </button>
               <button
                 onClick={() => setCurrentStep('review-outcomes')}
-                className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+                className="flex-1 px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
               >
                 Continue to Review Outcomes
                 <ChevronRight className="w-5 h-5" />
@@ -1208,66 +1440,222 @@ export function DailyPlanningPage() {
       )}
 
       {currentStep === 'review-outcomes' && (
-        <div className="bg-white rounded-2xl p-8 shadow-soft">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Active Outcomes</h2>
-            <p className="text-gray-600">
-              These are all your current results. In the next step, you'll choose 1-3 to focus on
-              today.
-            </p>
-          </div>
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl p-8 shadow-soft">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Active Outcomes</h2>
+              <p className="text-gray-600 mb-4">
+                These are all your current results. In the next step, you'll choose 1-3 to focus on today.
+              </p>
 
-          {outcomes.length === 0 ? (
-            <div className="text-center py-8 sm:py-12">
-              <Target className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No Outcomes Yet</h3>
-              <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">Create your first outcome to begin planning</p>
-              <a
-                href="/outcomes"
-                className="inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors text-sm sm:text-base min-h-touch-target"
-              >
-                Create Outcome
-              </a>
+              <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+                <button
+                  onClick={() => setReviewViewMode('chunks')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    reviewViewMode === 'chunks'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Chunks Only
+                </button>
+                <button
+                  onClick={() => setReviewViewMode('outcomes')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    reviewViewMode === 'outcomes'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Outcomes Only
+                </button>
+                <button
+                  onClick={() => setReviewViewMode('both')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    reviewViewMode === 'both'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Both
+                </button>
+              </div>
             </div>
-          ) : (
-            <>
-              <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
-                {outcomes.map((outcome) => (
-                  <div
-                    key={outcome.id}
-                    className="border-2 border-gray-200 rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-blue-300 transition-colors"
-                  >
-                    <div className="flex items-start gap-2 sm:gap-3">
-                      <Target className="w-5 h-5 sm:w-6 sm:h-6 text-primary-500 flex-shrink-0 mt-1" />
-                      <div className="flex-1">
-                        <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1">{outcome.title}</h3>
-                        {outcome.description && (
-                          <p className="text-xs sm:text-sm text-gray-600 mb-2">{outcome.description}</p>
-                        )}
-                        <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                          <Heart className="w-3 h-3 sm:w-4 sm:h-4 text-red-500 flex-shrink-0" />
-                          <p className="text-xs sm:text-sm text-gray-700 italic">{outcome.purpose}</p>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
-                          <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
-                          <span>{outcome.actions.length} actions in MAP</span>
+
+            {(reviewViewMode === 'chunks' || reviewViewMode === 'both') && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Package className="w-6 h-6 text-blue-600" />
+                  Your Organized Chunks
+                </h3>
+                {chunks.filter(c => !c.converted_at).length === 0 ? (
+                  <div className="bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                    <p className="text-gray-600 text-center">
+                      No unconverted chunks. All your organized items have been converted to outcomes!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {chunks.filter(c => !c.converted_at).map((chunk) => (
+                      <div
+                        key={chunk.id}
+                        className="border-2 rounded-xl p-5"
+                        style={{ borderColor: chunk.color }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Package className="w-5 h-5" style={{ color: chunk.color }} />
+                              <h4 className="font-bold text-gray-900">{chunk.name}</h4>
+                              <span className="text-sm text-gray-600">
+                                ({chunk.items.length} item{chunk.items.length !== 1 ? 's' : ''})
+                              </span>
+                            </div>
+                            {chunk.description && (
+                              <p className="text-sm text-gray-600 mb-3">{chunk.description}</p>
+                            )}
+                            {chunk.items.length > 0 && (
+                              <div className="space-y-1">
+                                {chunk.items.slice(0, 3).map((item) => (
+                                  <div key={item.id} className="text-sm text-gray-700 flex items-start gap-2">
+                                    <span className="text-gray-400 mt-0.5">•</span>
+                                    <span className="flex-1">{item.inbox_item.content}</span>
+                                  </div>
+                                ))}
+                                {chunk.items.length > 3 && (
+                                  <p className="text-sm text-gray-500 italic">
+                                    + {chunk.items.length - 3} more item{chunk.items.length - 3 !== 1 ? 's' : ''}...
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setSelectedChunkForConversion(chunk)}
+                            disabled={chunk.items.length === 0}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                          >
+                            Convert to Outcome
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+                {chunks.filter(c => c.converted_at).length > 0 && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-sm text-gray-600 mb-3 font-medium">Recently Converted:</p>
+                    <div className="space-y-2">
+                      {chunks.filter(c => c.converted_at).map((chunk) => (
+                        <div key={chunk.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                            <span className="text-sm font-medium text-gray-900">{chunk.name}</span>
+                            <span className="text-xs text-gray-600">
+                              ({chunk.items.length} items)
+                            </span>
+                          </div>
+                          {chunk.converted_to_id && (
+                            <a
+                              href={`/outcomes/${chunk.converted_to_id}`}
+                              className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                            >
+                              View Outcome
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
+            )}
 
-              <button
-                onClick={() => setCurrentStep('select-focus')}
-                className="w-full px-6 sm:px-8 py-3 sm:py-4 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-touch-target"
-              >
-                Continue to Focus Selection
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            </>
-          )}
+            {(reviewViewMode === 'outcomes' || reviewViewMode === 'both') && (
+              <>
+                {reviewViewMode === 'both' && <div className="mb-6 border-t" />}
+                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Target className="w-6 h-6 text-primary-500" />
+                  Your Active Outcomes
+                </h3>
+                {outcomes.length === 0 ? (
+                  <div className="text-center py-8 sm:py-12">
+                    <Target className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
+                    <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No Outcomes Yet</h3>
+                    <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">Create your first outcome to begin planning</p>
+                    {chunks.filter(c => !c.converted_at && c.items.length > 0).length > 0 ? (
+                      <p className="text-sm text-blue-600 mb-4">
+                        Convert one of your chunks above to create your first outcome!
+                      </p>
+                    ) : (
+                      <a
+                        href="/outcomes"
+                        className="inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 transition-colors text-sm sm:text-base min-h-touch-target"
+                      >
+                        Create Outcome
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3 sm:space-y-4">
+                    {outcomes.map((outcome) => (
+                      <div
+                        key={outcome.id}
+                        className="border-2 border-gray-200 rounded-lg sm:rounded-xl p-4 sm:p-6 hover:border-blue-300 transition-colors"
+                      >
+                        <div className="flex items-start gap-2 sm:gap-3">
+                          <Target className="w-5 h-5 sm:w-6 sm:h-6 text-primary-500 flex-shrink-0 mt-1" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-base sm:text-lg font-bold text-gray-900">{outcome.title}</h3>
+                              {outcome.source_chunk_id && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                                  From Chunk
+                                </span>
+                              )}
+                            </div>
+                            {outcome.description && (
+                              <p className="text-xs sm:text-sm text-gray-600 mb-2">{outcome.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                              <Heart className="w-3 h-3 sm:w-4 sm:h-4 text-red-500 flex-shrink-0" />
+                              <p className="text-xs sm:text-sm text-gray-700 italic">{outcome.purpose}</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
+                              <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
+                              <span>{outcome.actions.length} actions in MAP</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            <button
+              onClick={() => setCurrentStep('select-focus')}
+              disabled={outcomes.length === 0}
+              className="w-full mt-8 px-6 sm:px-8 py-3 sm:py-4 bg-primary-500 text-white rounded-lg sm:rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base min-h-touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Continue to Focus Selection
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          </div>
         </div>
+      )}
+
+      {selectedChunkForConversion && (
+        <ChunkToOutcomeModal
+          chunk={selectedChunkForConversion}
+          areas={areas}
+          goals={goals}
+          onClose={() => setSelectedChunkForConversion(null)}
+          onSuccess={handleChunkConversionSuccess}
+        />
       )}
 
       {currentStep === 'select-focus' && (
@@ -1330,7 +1718,7 @@ export function DailyPlanningPage() {
           <button
             onClick={() => setCurrentStep('set-purpose')}
             disabled={selectedOutcomes.length === 0}
-            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Continue to Purpose
             <ChevronRight className="w-5 h-5" />
@@ -1409,7 +1797,7 @@ export function DailyPlanningPage() {
 
           <button
             onClick={() => setCurrentStep('plan-actions')}
-            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
           >
             Continue to Action Planning
             <ChevronRight className="w-5 h-5" />
@@ -1606,7 +1994,7 @@ export function DailyPlanningPage() {
           <button
             onClick={() => setCurrentStep('commit')}
             disabled={selectedActions.length === 0}
-            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-8 py-4 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Review & Commit
             <ChevronRight className="w-5 h-5" />
@@ -1674,7 +2062,7 @@ export function DailyPlanningPage() {
               <button
                 onClick={handleSaveDailyPlan}
                 disabled={saving}
-                className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors shadow-lg disabled:opacity-50"
+                className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 active:scale-[0.98] transition-all shadow-lg disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save & Go to Today View'}
               </button>

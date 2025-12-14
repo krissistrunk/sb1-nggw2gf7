@@ -12,21 +12,17 @@ export function useKnowledge() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && organization) {
+    if (user) {
       loadNotes();
       loadTags();
     }
-  }, [user, organization]);
+  }, [user]);
 
   const loadNotes = async (filters?: any) => {
-    if (!user || !organization) return;
     try {
       setLoading(true);
       setError(null);
-      const data = await knowledgeService.getNotes(
-        { userId: user.id, organizationId: organization.id },
-        filters
-      );
+      const data = await knowledgeService.getNotes(filters);
       setNotes(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load notes');
@@ -36,9 +32,8 @@ export function useKnowledge() {
   };
 
   const loadTags = async () => {
-    if (!user || !organization) return;
     try {
-      const data = await knowledgeService.getTags({ userId: user.id, organizationId: organization.id });
+      const data = await knowledgeService.getTags();
       setTags(data);
     } catch (err) {
       console.error('Failed to load tags:', err);
@@ -46,13 +41,12 @@ export function useKnowledge() {
   };
 
   const createNote = async (note: Partial<KnowledgeNote>) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
       setError(null);
-      const newNote = await knowledgeService.createNote(
-        { userId: user.id, organizationId: organization.id },
-        note
-      );
+      const newNote = await knowledgeService.createNote({
+        ...note,
+        organization_id: organization?.id,
+      });
       setNotes((prev) => [newNote, ...prev]);
       return newNote;
     } catch (err) {
@@ -63,14 +57,9 @@ export function useKnowledge() {
   };
 
   const updateNote = async (id: string, updates: Partial<KnowledgeNote>) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
       setError(null);
-      const updatedNote = await knowledgeService.updateNote(
-        { userId: user.id, organizationId: organization.id },
-        id,
-        updates
-      );
+      const updatedNote = await knowledgeService.updateNote(id, updates);
       setNotes((prev) => prev.map((n) => (n.id === id ? updatedNote : n)));
       return updatedNote;
     } catch (err) {
@@ -81,10 +70,9 @@ export function useKnowledge() {
   };
 
   const deleteNote = async (id: string) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
       setError(null);
-      await knowledgeService.deleteNote({ userId: user.id, organizationId: organization.id }, id);
+      await knowledgeService.deleteNote(id);
       setNotes((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to delete note';
@@ -98,15 +86,10 @@ export function useKnowledge() {
   };
 
   const semanticSearch = async (query: string, limit = 5) => {
-    if (!user || !organization) return [];
     try {
       setLoading(true);
       setError(null);
-      const results = await knowledgeService.semanticSearch(
-        { userId: user.id, organizationId: organization.id },
-        query,
-        limit
-      );
+      const results = await knowledgeService.semanticSearch(query, limit);
       return results;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search');
@@ -117,9 +100,10 @@ export function useKnowledge() {
   };
 
   const createTag = async (tagName: string, category?: string, color?: string) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
-      const newTag = await knowledgeService.createTag({ userId: user.id, organizationId: organization.id }, {
+      const newTag = await knowledgeService.createTag({
+        user_id: user!.id,
+        organization_id: organization!.id,
         tag_name: tagName,
         category,
         color: color || '#6366f1',
@@ -132,9 +116,8 @@ export function useKnowledge() {
   };
 
   const addTagToNote = async (noteId: string, tagId: string) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
-      await knowledgeService.addTagToNote({ userId: user.id, organizationId: organization.id }, noteId, tagId);
+      await knowledgeService.addTagToNote(noteId, tagId);
       await loadNotes();
       await loadTags();
     } catch (err) {
@@ -143,9 +126,8 @@ export function useKnowledge() {
   };
 
   const removeTagFromNote = async (noteId: string, tagId: string) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
-      await knowledgeService.removeTagFromNote({ userId: user.id, organizationId: organization.id }, noteId, tagId);
+      await knowledgeService.removeTagFromNote(noteId, tagId);
       await loadNotes();
       await loadTags();
     } catch (err) {
@@ -154,9 +136,8 @@ export function useKnowledge() {
   };
 
   const getGraphData = async () => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
-      return await knowledgeService.getGraphData({ userId: user.id, organizationId: organization.id });
+      return await knowledgeService.getGraphData();
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to load graph');
     }
@@ -167,13 +148,12 @@ export function useKnowledge() {
     conversationHistory: any[],
     sessionType: string
   ) => {
-    if (!user || !organization) throw new Error('Not authenticated');
     try {
       const result = await knowledgeService.extractKnowledgeFromSession(
-        { userId: user.id, organizationId: organization.id },
         sessionId,
         conversationHistory,
-        sessionType
+        sessionType,
+        organization!.id
       );
       await loadNotes();
       return result;

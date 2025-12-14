@@ -283,10 +283,10 @@ export function OutcomeDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {outcome.areas && (
+          {outcome.area && (
             <div className="bg-white/10 rounded-xl p-4">
               <p className="text-sm text-primary-100 mb-1">Area</p>
-              <p className="font-semibold">{outcome.areas.name}</p>
+              <p className="font-semibold">{outcome.area.name}</p>
             </div>
           )}
           {outcome.target_date && (

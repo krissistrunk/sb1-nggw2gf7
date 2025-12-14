@@ -1,7 +1,5 @@
 import { supabase } from './supabase';
 import { aiService } from './ai-service';
-import type { Database, Json } from './database.types';
-import { requireOrganizationId, requireUserId } from './validation';
 
 export interface KnowledgeNote {
   id: string;
@@ -11,11 +9,11 @@ export interface KnowledgeNote {
   content: string;
   note_type: 'permanent' | 'fleeting' | 'literature' | 'insight' | 'pattern' | 'learning';
   source_type: 'coaching_session' | 'manual' | 'ai_generated' | 'weekly_review' | 'daily_reflection' | 'outcome_completion';
-  source_id: string | null;
+  source_id?: string;
   metadata: {
     tags?: string[];
     potential_links?: string[];
-    [key: string]: unknown;
+    [key: string]: any;
   };
   created_at: string;
   updated_at: string;
@@ -28,7 +26,7 @@ export interface KnowledgeTag {
   user_id: string;
   organization_id: string;
   tag_name: string;
-  category: string | null;
+  category?: string;
   color: string;
   note_count: number;
   created_at: string;
@@ -40,7 +38,7 @@ export interface KnowledgeLink {
   from_note_id: string;
   to_note_id: string;
   link_type: 'relates_to' | 'contradicts' | 'supports' | 'example_of' | 'caused_by' | 'leads_to';
-  strength: number | null;
+  strength: number;
   created_by: 'user' | 'ai';
   created_at: string;
 }
@@ -52,128 +50,61 @@ export interface WikiLink {
   noteId?: string;
 }
 
-// Security context required for all operations
-export interface KnowledgeContext {
-  userId: string;
-  organizationId: string;
-}
-
 class KnowledgeService {
-  // Validate and normalize context
-  private validateContext(ctx: Partial<KnowledgeContext>): KnowledgeContext {
-    return {
-      userId: requireUserId(ctx.userId),
-      organizationId: requireOrganizationId(ctx.organizationId),
-    };
-  }
-
-  private normalizeNote(row: Database['public']['Tables']['knowledge_notes']['Row']): KnowledgeNote {
-    const metadata =
-      row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
-        ? (row.metadata as KnowledgeNote['metadata'])
-        : {};
-
-    return {
-      ...row,
-      source_id: row.source_id,
-      metadata,
-    };
-  }
-
-  async createNote(ctx: Partial<KnowledgeContext>, note: Partial<KnowledgeNote>): Promise<KnowledgeNote> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
-    const title = note.title?.trim();
-    if (!title) {
-      throw new Error('Title is required');
-    }
-
-    const insert: Database['public']['Tables']['knowledge_notes']['Insert'] = {
-      user_id: userId,
-      organization_id: organizationId,
-      title,
-      content: note.content ?? '',
-      note_type: note.note_type ?? 'fleeting',
-      source_type: note.source_type ?? 'manual',
-      source_id: note.source_id ?? null,
-      metadata: (note.metadata ?? {}) as unknown as Json,
-    };
-
+  async createNote(note: Partial<KnowledgeNote>): Promise<KnowledgeNote> {
     const { data, error } = await supabase
       .from('knowledge_notes')
-      .insert(insert)
+      .insert(note)
       .select()
       .single();
 
     if (error) throw error;
-    return this.normalizeNote(data);
+    return data;
   }
 
-  async updateNote(ctx: Partial<KnowledgeContext>, id: string, updates: Partial<KnowledgeNote>): Promise<KnowledgeNote> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
-    const { metadata, ...rest } = updates;
-    const updatePayload: Database['public']['Tables']['knowledge_notes']['Update'] = {
-      ...rest,
-      metadata: metadata ? (metadata as unknown as Json) : undefined,
-    };
-
+  async updateNote(id: string, updates: Partial<KnowledgeNote>): Promise<KnowledgeNote> {
     const { data, error } = await supabase
       .from('knowledge_notes')
-      .update(updatePayload)
+      .update(updates)
       .eq('id', id)
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId)
       .select()
       .single();
 
     if (error) throw error;
-    return this.normalizeNote(data);
+    return data;
   }
 
-  async deleteNote(ctx: Partial<KnowledgeContext>, id: string): Promise<void> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
+  async deleteNote(id: string): Promise<void> {
     const { error } = await supabase
       .from('knowledge_notes')
       .delete()
-      .eq('id', id)
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId);
+      .eq('id', id);
 
     if (error) throw error;
   }
 
-  async getNote(ctx: Partial<KnowledgeContext>, id: string): Promise<KnowledgeNote | null> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
+  async getNote(id: string): Promise<KnowledgeNote | null> {
     const { data, error } = await supabase
       .from('knowledge_notes')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId)
       .maybeSingle();
 
     if (error) throw error;
-    return data ? this.normalizeNote(data) : null;
+    return data;
   }
 
-  async getNotes(ctx: Partial<KnowledgeContext>, filters?: {
-    noteType?: KnowledgeNote['note_type'];
-    sourceType?: KnowledgeNote['source_type'];
+  async getNotes(filters?: {
+    noteType?: string;
+    sourceType?: string;
     tags?: string[];
     searchQuery?: string;
     limit?: number;
     offset?: number;
   }): Promise<KnowledgeNote[]> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
     let query = supabase
       .from('knowledge_notes')
       .select('*')
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
 
     if (filters?.noteType) {
@@ -199,18 +130,13 @@ class KnowledgeService {
     const { data, error } = await query;
 
     if (error) throw error;
-    return (data || []).map((row) => this.normalizeNote(row));
+    return data || [];
   }
 
-  async createLink(ctx: Partial<KnowledgeContext>, link: Omit<KnowledgeLink, 'id' | 'created_at' | 'user_id'>): Promise<KnowledgeLink> {
-    const { userId } = this.validateContext(ctx);
-
+  async createLink(link: Omit<KnowledgeLink, 'id' | 'created_at'>): Promise<KnowledgeLink> {
     const { data, error } = await supabase
       .from('knowledge_links')
-      .insert({
-        ...link,
-        user_id: userId,
-      })
+      .insert(link)
       .select()
       .single();
 
@@ -218,20 +144,16 @@ class KnowledgeService {
     return data;
   }
 
-  async getLinksForNote(ctx: Partial<KnowledgeContext>, noteId: string): Promise<{ outgoing: KnowledgeLink[]; incoming: KnowledgeLink[] }> {
-    const { userId } = this.validateContext(ctx);
-
+  async getLinksForNote(noteId: string): Promise<{ outgoing: KnowledgeLink[]; incoming: KnowledgeLink[] }> {
     const { data: outgoing, error: outError } = await supabase
       .from('knowledge_links')
       .select('*')
-      .eq('from_note_id', noteId)
-      .eq('user_id', userId);
+      .eq('from_note_id', noteId);
 
     const { data: incoming, error: inError } = await supabase
       .from('knowledge_links')
       .select('*')
-      .eq('to_note_id', noteId)
-      .eq('user_id', userId);
+      .eq('to_note_id', noteId);
 
     if (outError) throw outError;
     if (inError) throw inError;
@@ -242,31 +164,19 @@ class KnowledgeService {
     };
   }
 
-  async deleteLink(ctx: Partial<KnowledgeContext>, id: string): Promise<void> {
-    const { userId } = this.validateContext(ctx);
-
+  async deleteLink(id: string): Promise<void> {
     const { error } = await supabase
       .from('knowledge_links')
       .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
+      .eq('id', id);
 
     if (error) throw error;
   }
 
-  async createTag(
-    ctx: Partial<KnowledgeContext>,
-    tag: { tag_name: string; category?: string | null; color?: string }
-  ): Promise<KnowledgeTag> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
+  async createTag(tag: Omit<KnowledgeTag, 'id' | 'note_count' | 'created_at'>): Promise<KnowledgeTag> {
     const { data, error } = await supabase
       .from('knowledge_tags')
-      .insert({
-        ...tag,
-        user_id: userId,
-        organization_id: organizationId,
-      })
+      .insert(tag)
       .select()
       .single();
 
@@ -274,27 +184,17 @@ class KnowledgeService {
     return data;
   }
 
-  async getTags(ctx: Partial<KnowledgeContext>): Promise<KnowledgeTag[]> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
+  async getTags(): Promise<KnowledgeTag[]> {
     const { data, error } = await supabase
       .from('knowledge_tags')
       .select('*')
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId)
       .order('note_count', { ascending: false });
 
     if (error) throw error;
     return data || [];
   }
 
-  async addTagToNote(ctx: Partial<KnowledgeContext>, noteId: string, tagId: string): Promise<void> {
-    // First verify the note belongs to this user
-    const note = await this.getNote(ctx, noteId);
-    if (!note) {
-      throw new Error('Note not found or access denied');
-    }
-
+  async addTagToNote(noteId: string, tagId: string): Promise<void> {
     const { error } = await supabase
       .from('knowledge_note_tags')
       .insert({ note_id: noteId, tag_id: tagId });
@@ -302,13 +202,7 @@ class KnowledgeService {
     if (error) throw error;
   }
 
-  async removeTagFromNote(ctx: Partial<KnowledgeContext>, noteId: string, tagId: string): Promise<void> {
-    // First verify the note belongs to this user
-    const note = await this.getNote(ctx, noteId);
-    if (!note) {
-      throw new Error('Note not found or access denied');
-    }
-
+  async removeTagFromNote(noteId: string, tagId: string): Promise<void> {
     const { error } = await supabase
       .from('knowledge_note_tags')
       .delete()
@@ -318,13 +212,7 @@ class KnowledgeService {
     if (error) throw error;
   }
 
-  async getTagsForNote(ctx: Partial<KnowledgeContext>, noteId: string): Promise<KnowledgeTag[]> {
-    // First verify the note belongs to this user
-    const note = await this.getNote(ctx, noteId);
-    if (!note) {
-      throw new Error('Note not found or access denied');
-    }
-
+  async getTagsForNote(noteId: string): Promise<KnowledgeTag[]> {
     const { data, error } = await supabase
       .from('knowledge_note_tags')
       .select('tag_id, knowledge_tags(*)')
@@ -350,8 +238,7 @@ class KnowledgeService {
     return links;
   }
 
-  async resolveWikiLinks(ctx: Partial<KnowledgeContext>, content: string): Promise<WikiLink[]> {
-    const { userId, organizationId } = this.validateContext(ctx);
+  async resolveWikiLinks(content: string): Promise<WikiLink[]> {
     const links = this.parseWikiLinks(content);
 
     for (const link of links) {
@@ -359,8 +246,6 @@ class KnowledgeService {
         .from('knowledge_notes')
         .select('id')
         .eq('title', link.noteTitle)
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
         .maybeSingle();
 
       if (data) {
@@ -372,37 +257,27 @@ class KnowledgeService {
     return links;
   }
 
-  async createNoteFromWikiLink(ctx: Partial<KnowledgeContext>, title: string): Promise<KnowledgeNote> {
-    return this.createNote(ctx, {
+  async createNoteFromWikiLink(title: string, organizationId: string): Promise<KnowledgeNote> {
+    return this.createNote({
       title,
       content: '',
       note_type: 'fleeting',
       source_type: 'manual',
+      organization_id: organizationId,
       metadata: {},
     });
   }
 
-  async semanticSearch(ctx: Partial<KnowledgeContext>, query: string, limit = 5): Promise<any[]> {
-    const { organizationId } = this.validateContext(ctx);
+  async semanticSearch(query: string, limit = 5): Promise<any[]> {
     return await aiService.callEdgeFunction('semantic-search', {
       query,
       limit,
-      organization_id: organizationId,
     });
   }
 
-  async generateEmbedding(ctx: Partial<KnowledgeContext>, noteId: string, content: string): Promise<void> {
-    const { organizationId } = this.validateContext(ctx);
-
-    // Verify note ownership
-    const note = await this.getNote(ctx, noteId);
-    if (!note) {
-      throw new Error('Note not found or access denied');
-    }
-
+  async generateEmbedding(noteId: string, content: string): Promise<void> {
     const result = await aiService.callEdgeFunction('generate-embedding', {
       text: content,
-      organization_id: organizationId,
     });
 
     await supabase
@@ -415,12 +290,11 @@ class KnowledgeService {
   }
 
   async extractKnowledgeFromSession(
-    ctx: Partial<KnowledgeContext>,
     sessionId: string,
     conversationHistory: any[],
-    sessionType: string
+    sessionType: string,
+    organizationId: string
   ): Promise<any> {
-    const { organizationId } = this.validateContext(ctx);
     return await aiService.callEdgeFunction('extract-knowledge', {
       sessionId,
       conversationHistory,
@@ -429,19 +303,14 @@ class KnowledgeService {
     });
   }
 
-  async getGraphData(ctx: Partial<KnowledgeContext>): Promise<{ nodes: any[]; edges: any[] }> {
-    const { userId, organizationId } = this.validateContext(ctx);
-
+  async getGraphData(): Promise<{ nodes: any[]; edges: any[] }> {
     const { data: notes } = await supabase
       .from('knowledge_notes')
-      .select('id, title, note_type, reference_count')
-      .eq('user_id', userId)
-      .eq('organization_id', organizationId);
+      .select('id, title, note_type, reference_count');
 
     const { data: links } = await supabase
       .from('knowledge_links')
-      .select('*')
-      .eq('user_id', userId);
+      .select('*');
 
     const nodes = (notes || []).map((note: any) => ({
       id: note.id,
@@ -461,8 +330,8 @@ class KnowledgeService {
     return { nodes, edges };
   }
 
-  async exportAsMarkdown(ctx: Partial<KnowledgeContext>): Promise<{ filename: string; content: string }[]> {
-    const notes = await this.getNotes(ctx);
+  async exportAsMarkdown(): Promise<{ filename: string; content: string }[]> {
+    const notes = await this.getNotes();
 
     return notes.map((note) => ({
       filename: `${note.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`,

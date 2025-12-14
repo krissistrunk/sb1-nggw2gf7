@@ -67,11 +67,6 @@ export function useSpeechSynthesis(options: SpeechSynthesisOptions = {}) {
         return;
       }
 
-      if (!autoSpeak) {
-        if (onComplete) onComplete();
-        return;
-      }
-
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
@@ -126,7 +121,7 @@ export function useSpeechSynthesis(options: SpeechSynthesisOptions = {}) {
         }));
       }
     },
-    [state.supported, autoSpeak, state.voices, voice, rate, pitch, volume]
+    [state.supported, state.voices, voice, rate, pitch, volume]
   );
 
   const pause = useCallback(() => {

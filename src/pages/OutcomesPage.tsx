@@ -9,6 +9,7 @@ import type { Goal } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { GOAL_STATUS, OUTCOME_STATUS, type OutcomeStatus } from '../constants/status';
 
 interface Area {
   id: string;
@@ -22,7 +23,7 @@ interface Outcome {
   title: string;
   description: string | null;
   purpose: string;
-  status: string;
+  status: OutcomeStatus;
   area_id: string;
   goal_id: string | null;
   created_at: string;
@@ -77,7 +78,7 @@ export function OutcomesPage() {
         .from('goals')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('status', 'ACTIVE')
+        .eq('status', GOAL_STATUS.ACTIVE)
         .eq('is_draft', false)
         .order('year', { ascending: false })
         .order('quarter', { ascending: false });
@@ -114,6 +115,11 @@ export function OutcomesPage() {
       return;
     }
 
+     if (!formData.area_id) {
+      alert('Please select an area before creating an outcome. Create an area first if you have none.');
+      return;
+    }
+
     try {
       if (editingOutcome) {
         await supabase
@@ -136,7 +142,7 @@ export function OutcomesPage() {
           purpose: formData.purpose,
           area_id: formData.area_id,
           goal_id: formData.goal_id || null,
-          status: 'ACTIVE',
+          status: OUTCOME_STATUS.ACTIVE,
           is_draft: isDraft,
         });
 
@@ -181,12 +187,20 @@ export function OutcomesPage() {
   };
 
   const toggleStatus = async (outcome: Outcome) => {
-    const newStatus = outcome.status === 'ACTIVE' ? 'COMPLETED' : 'ACTIVE';
+    const newStatus = outcome.status === OUTCOME_STATUS.ACTIVE
+      ? OUTCOME_STATUS.COMPLETED
+      : OUTCOME_STATUS.ACTIVE;
     await supabase.from('outcomes').update({ status: newStatus }).eq('id', outcome.id);
     loadData();
   };
 
   const openNewModal = () => {
+    if (areas.length === 0) {
+      alert('Please create an area before creating outcomes. Use Quick Add Area to get started.');
+      setShowQuickAddArea(true);
+      return;
+    }
+
     setEditingOutcome(null);
     setFormData({ title: '', description: '', purpose: '', area_id: areas[0]?.id || '', goal_id: '' });
     setShowModal(true);
@@ -220,8 +234,8 @@ export function OutcomesPage() {
     }
   };
 
-  const activeOutcomes = outcomes.filter(o => o.status === 'ACTIVE');
-  const completedOutcomes = outcomes.filter(o => o.status === 'COMPLETED');
+  const activeOutcomes = outcomes.filter(o => o.status === OUTCOME_STATUS.ACTIVE);
+  const completedOutcomes = outcomes.filter(o => o.status === OUTCOME_STATUS.COMPLETED);
 
   return (
     <div>
@@ -242,7 +256,7 @@ export function OutcomesPage() {
       </BackgroundHeroSection>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 pb-12 space-y-4 sm:space-y-6">
-        {!loading && (
+        {!loading && (activeOutcomes.length > 0 || completedOutcomes.length > 0) && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-3 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button
@@ -296,19 +310,22 @@ export function OutcomesPage() {
             <div>
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">Active Outcomes</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {activeOutcomes.map((outcome) => (
-                  <div
-                    key={outcome.id}
-                    className={`bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-soft-lg transition-shadow relative group ${
-                      outcome.is_draft ? 'border-2 border-amber-300' : ''
-                    }`}
-                  >
+                {activeOutcomes.map((outcome) => {
+                  const isDraft = (outcome as any).is_draft ?? false;
+
+                  return (
+                    <div
+                      key={outcome.id}
+                      className={`bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-soft-lg transition-shadow relative group ${
+                        isDraft ? 'border-2 border-amber-300' : ''
+                      }`}
+                    >
                     <div
                       onClick={() => navigate(`/outcomes/${outcome.id}`)}
                       className="cursor-pointer mb-4"
                     >
                       <div className="flex items-start gap-2 sm:gap-3">
-                        {outcome.is_draft ? (
+                        {isDraft ? (
                           <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500 flex-shrink-0 mt-1" />
                         ) : (
                           <Target className="w-5 h-5 sm:w-6 sm:h-6 text-primary-500 flex-shrink-0 mt-1" />
@@ -322,7 +339,7 @@ export function OutcomesPage() {
                             <p className="text-xs sm:text-sm text-gray-600">{outcome.description}</p>
                           )}
                           <div className="mt-2 flex flex-wrap gap-1 sm:gap-2">
-                            {outcome.is_draft && (
+                            {isDraft && (
                               <span className="inline-flex items-center px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-amber-100 text-amber-700">
                                 DRAFT
                               </span>
@@ -373,8 +390,9 @@ export function OutcomesPage() {
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  );
+                })}
+                </div>
             </div>
           )}
 
@@ -423,7 +441,7 @@ export function OutcomesPage() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-2xl p-8 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900">
                 {editingOutcome ? 'Edit Outcome' : 'New Outcome'}
@@ -620,7 +638,7 @@ export function OutcomesPage() {
                   className="flex-1 px-6 py-3 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-colors disabled:opacity-50"
                   disabled={!formData.area_id && areas.length === 0 && !showQuickAddArea}
                 >
-                  {editingOutcome?.is_draft ? 'Publish Outcome' : editingOutcome ? 'Save Changes' : 'Create Outcome'}
+                    {(editingOutcome as any)?.is_draft ? 'Publish Outcome' : editingOutcome ? 'Save Changes' : 'Create Outcome'}
                 </button>
               </div>
             </form>

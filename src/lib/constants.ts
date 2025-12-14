@@ -1,3 +1,5 @@
+import { GOAL_STATUS, OUTCOME_STATUS as OUTCOME_STATUS_VALUES, type GoalStatus, type OutcomeStatus as OutcomeStatusValue } from '../constants/status';
+
 /**
  * Application-wide constants
  */
@@ -32,13 +34,10 @@ export const MEMBER_ROLES = {
 export type MemberRole = keyof typeof MEMBER_ROLES;
 
 // Outcome and action statuses
-export const OUTCOME_STATUS = {
-  ACTIVE: 'ACTIVE',
-  COMPLETED: 'COMPLETED',
-  ARCHIVED: 'ARCHIVED',
-} as const;
-
-export type OutcomeStatus = keyof typeof OUTCOME_STATUS;
+export const OUTCOME_STATUS = OUTCOME_STATUS_VALUES;
+export type OutcomeStatus = OutcomeStatusValue;
+export { GOAL_STATUS };
+export type { GoalStatus };
 
 // Priority levels
 export const PRIORITY_LEVELS = {

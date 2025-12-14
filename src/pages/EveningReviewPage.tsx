@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Moon, Star, CheckCircle2, XCircle, Lightbulb, TrendingUp, Flame, User } from 'lucide-react';
+import { Moon, Star, CheckCircle2, XCircle, Lightbulb, TrendingUp, Flame, Clock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
-import type { Action } from '../lib/database.types';
+import type { Action, DailyNote } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
@@ -43,15 +43,11 @@ export function EveningReviewPage() {
   }, [user, organization]);
 
   const loadData = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     try {
       const { data: actionsData } = await supabase
         .from('actions')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .eq('scheduled_date', today)
         .order('done', { ascending: true });
 
@@ -60,8 +56,7 @@ export function EveningReviewPage() {
       const { data: dailyNoteData } = await supabase
         .from('daily_notes')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
         .eq('date', today)
         .maybeSingle();
 
@@ -77,10 +72,6 @@ export function EveningReviewPage() {
   };
 
   const handleSaveReview = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     setSaving(true);
     try {
       const reflectionText = `
@@ -98,8 +89,8 @@ REFLECTION: ${reflection}
       const { data: existingNote } = await supabase
         .from('daily_notes')
         .select('id')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
+        .eq('organization_id', organization?.id)
         .eq('date', today)
         .maybeSingle();
 
@@ -114,8 +105,8 @@ REFLECTION: ${reflection}
           .eq('id', existingNote.id);
       } else {
         await supabase.from('daily_notes').insert({
-          user_id: userId,
-          organization_id: organizationId,
+          user_id: user?.id,
+          organization_id: organization?.id,
           date: today,
           evening_reflection: reflectionText,
           energy_level: energyLevel,
@@ -145,6 +136,14 @@ REFLECTION: ${reflection}
   const completedMustTime = completedMustActions.reduce((sum, a) => sum + (a.duration_minutes || 0), 0);
 
   const delegatedActions = todayActions.filter((a) => a.delegated_to);
+
+  const actionsByOutcome = todayActions.reduce((acc, action) => {
+    if (!acc[action.outcome_id]) {
+      acc[action.outcome_id] = [];
+    }
+    acc[action.outcome_id].push(action);
+    return acc;
+  }, {} as Record<string, Action[]>);
 
   if (loading) {
     return (

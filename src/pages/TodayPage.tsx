@@ -11,6 +11,7 @@ import type { Action as ActionType } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { OUTCOME_STATUS } from '../constants/status';
 
 interface Outcome {
   id: string;
@@ -53,10 +54,10 @@ export function TodayPage() {
   } = usePageBackground('today');
 
   useEffect(() => {
-    if (user && organization?.id) {
+    if (user) {
       loadData();
     }
-  }, [user, organization?.id]);
+  }, [user]);
 
   const loadData = async () => {
     try {
@@ -66,15 +67,13 @@ export function TodayPage() {
         .from('outcomes')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
-        .eq('status', 'ACTIVE')
+        .eq('status', OUTCOME_STATUS.ACTIVE)
         .order('created_at', { ascending: false });
 
       const { data: actionsData } = await supabase
         .from('actions')
         .select('*')
         .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
         .eq('scheduled_date', today)
         .order('is_must', { ascending: false })
         .order('created_at', { ascending: false });
@@ -106,8 +105,6 @@ export function TodayPage() {
           .from('actions')
           .select('*')
           .eq('outcome_id', outcomeId)
-          .eq('user_id', user?.id)
-          .eq('organization_id', organization?.id)
           .eq('done', false)
           .order('is_must', { ascending: false })
           .order('sort_order', { ascending: true })
@@ -139,9 +136,7 @@ export function TodayPage() {
     await supabase
       .from('actions')
       .update({ done, completed_at: done ? new Date().toISOString() : null })
-      .eq('id', actionId)
-      .eq('user_id', user?.id)
-      .eq('organization_id', organization?.id);
+      .eq('id', actionId);
 
     loadData();
   };

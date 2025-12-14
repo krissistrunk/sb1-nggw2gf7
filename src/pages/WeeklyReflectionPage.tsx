@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { format, startOfWeek, addDays } from 'date-fns';
-import { Check, ChevronDown, ChevronUp, TrendingUp, Target as TargetIcon } from 'lucide-react';
+import { format, startOfWeek, addDays, parseISO } from 'date-fns';
+import { Check, ChevronDown, ChevronUp, TrendingUp, Clock, Target as TargetIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile } from 'lucide-react';
@@ -78,14 +78,11 @@ export function WeeklyReflectionPage() {
   }, [user]);
 
   const loadWeekData = async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
     try {
       const { data: blocks } = await supabase
         .from('time_blocks')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .gte('scheduled_start', weekStart.toISOString())
         .lt('scheduled_start', weekEnd.toISOString())
         .order('scheduled_start');
@@ -168,6 +165,7 @@ export function WeeklyReflectionPage() {
     return timeBlocks.filter(b => b.area?.id === areaId && b.completed);
   };
 
+  const totalPlannedMinutes = areaStats.reduce((sum, s) => sum + s.plannedMinutes, 0);
   const totalActualMinutes = areaStats.reduce((sum, s) => sum + s.actualMinutes, 0);
   const totalCompletedBlocks = areaStats.reduce((sum, s) => sum + s.completedBlocks, 0);
   const totalBlocks = areaStats.reduce((sum, s) => sum + s.totalBlocks, 0);

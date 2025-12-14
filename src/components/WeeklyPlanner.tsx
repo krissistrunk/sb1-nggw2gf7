@@ -5,6 +5,7 @@ import { useActions } from '../hooks/useActions';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
+import { OUTCOME_STATUS } from '../constants/status';
 
 interface WeeklyPlannerProps {
   outcomes: OutcomeWithRelations[];
@@ -48,9 +49,9 @@ export function WeeklyPlanner({ outcomes, onRefresh }: WeeklyPlannerProps) {
       .select('*')
       .eq('user_id', user.id)
       .eq('organization_id', organization.id)
-      .gte('scheduled_start', startOfWeek.toISOString())
-      .lte('scheduled_start', endOfWeek.toISOString())
-      .order('scheduled_start');
+      .gte('start_time', startOfWeek.toISOString())
+      .lte('start_time', endOfWeek.toISOString())
+      .order('start_time');
 
     if (!error && data) {
       setTimeBlocks(data);
@@ -140,7 +141,7 @@ export function WeeklyPlanner({ outcomes, onRefresh }: WeeklyPlannerProps) {
     }
   };
 
-  const activeOutcomes = outcomes.filter((o) => o.status === 'ACTIVE');
+  const activeOutcomes = outcomes.filter((o) => o.status === OUTCOME_STATUS.ACTIVE);
   const unscheduledActions =
     selectedOutcome === 'all'
       ? activeOutcomes.flatMap((o) => o.actions.filter((a) => !a.scheduled_date && !a.done))

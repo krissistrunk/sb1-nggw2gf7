@@ -73,12 +73,13 @@ export function SetupOrganizationPage() {
 
       if (userUpdateError) throw userUpdateError;
 
-      navigate(ROUTES.TODAY);
-      window.location.reload();
+      // Give database a moment to commit changes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Force a full page reload to the Today page
+      window.location.href = ROUTES.TODAY;
     } catch (err: any) {
       console.error('Error creating organization:', err);
       setError(err.message || 'Failed to create organization. Please try again.');
-    } finally {
       setLoading(false);
     }
   };

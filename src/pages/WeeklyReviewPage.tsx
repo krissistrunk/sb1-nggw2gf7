@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Calendar, CheckCircle2, Target, Star, TrendingUp, Sparkles, Inbox, Clock, Check, ChevronDown, ChevronUp, Plus, Heart, Briefcase, DollarSign, Users, BookOpen, Smile, type LucideIcon } from 'lucide-react';
+import { Calendar, CheckCircle2, Target, Star, TrendingUp, Sparkles, Inbox, Clock, Check, ChevronDown, ChevronUp, Target as TargetIcon, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
-import type { InboxItem, Outcome } from '../lib/database.types';
+import type { InboxItem, Outcome, ReviewSession } from '../lib/database.types';
+import { Heart, Briefcase, DollarSign, Users, BookOpen, Smile } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { OUTCOME_STATUS } from '../constants/status';
 
-const ICON_MAP: Record<string, LucideIcon> = {
+const ICON_MAP: Record<string, any> = {
   Heart,
   Briefcase,
   DollarSign,
@@ -57,7 +59,6 @@ export function WeeklyReviewPage() {
   const [currentStep, setCurrentStep] = useState<ReviewStep>('welcome');
   const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
-  const [areas, setAreas] = useState<Record<string, Area>>({});
   const [selectedOutcomes, setSelectedOutcomes] = useState<string[]>([]);
   const [wins, setWins] = useState('');
   const [lessonsLearned, setLessonsLearned] = useState('');
@@ -97,59 +98,30 @@ export function WeeklyReviewPage() {
   }, [user, organization]);
 
   const loadData = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     try {
-      const { data: inboxData, error: inboxError } = await supabase
+      const { data: inboxData } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
-        .eq('triaged', false)
+        .eq('user_id', user?.id)
+        .eq('status', 'PENDING')
         .order('created_at', { ascending: false });
 
-      if (inboxError) throw inboxError;
-
-      const { data: outcomesData, error: outcomesError } = await supabase
+      const { data: outcomesData } = await supabase
         .from('outcomes')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
-        .eq('status', 'ACTIVE')
+        .select('*, areas(*)')
+        .eq('user_id', user?.id)
+        .eq('status', OUTCOME_STATUS.ACTIVE)
         .eq('is_draft', false)
         .order('created_at', { ascending: false });
 
-      if (outcomesError) throw outcomesError;
-
-      const areaIds = Array.from(
-        new Set((outcomesData || []).map((o) => o.area_id).filter((id): id is string => Boolean(id)))
-      );
-      const { data: areasData, error: areasError } = areaIds.length
-        ? await supabase.from('areas').select('id,name,icon,color').in('id', areaIds)
-        : { data: [] as Area[], error: null };
-
-      if (areasError) throw areasError;
-
-      const areasById: Record<string, Area> = {};
-      for (const area of areasData || []) {
-        areasById[area.id] = area;
-      }
-
-      setAreas(areasById);
-
-      const { data: lastReview, error: lastReviewError } = await supabase
+      const { data: lastReview } = await supabase
         .from('review_sessions')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
-        .eq('ritual_type', 'WEEKLY')
+        .eq('user_id', user?.id)
+        .eq('session_type', 'WEEKLY')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-
-      if (lastReviewError) throw lastReviewError;
 
       setInboxItems(inboxData || []);
       setOutcomes(outcomesData || []);
@@ -158,8 +130,7 @@ export function WeeklyReviewPage() {
       const { data: blocks } = await supabase
         .from('time_blocks')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
         .gte('scheduled_start', weekStart.toISOString())
         .lt('scheduled_start', weekEnd.toISOString())
         .order('scheduled_start');
@@ -256,10 +227,6 @@ export function WeeklyReviewPage() {
   };
 
   const handleCompleteReview = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     try {
       const reviewNotes = {
         wins: reflections.wins,
@@ -271,11 +238,10 @@ export function WeeklyReviewPage() {
       };
 
       await supabase.from('review_sessions').insert({
-        user_id: userId,
-        organization_id: organizationId,
-        ritual_type: 'WEEKLY',
-        date: new Date().toISOString().split('T')[0],
-        responses: reviewNotes,
+        user_id: user?.id,
+        organization_id: organization?.id,
+        session_type: 'WEEKLY',
+        notes: reviewNotes as any,
       });
 
       setCurrentStep('complete');
@@ -304,6 +270,7 @@ export function WeeklyReviewPage() {
   };
 
   const totalSteps = 7;
+  const totalPlannedMinutes = areaStats.reduce((sum, s) => sum + s.plannedMinutes, 0);
   const totalActualMinutes = areaStats.reduce((sum, s) => sum + s.actualMinutes, 0);
   const totalCompletedBlocks = areaStats.reduce((sum, s) => sum + s.completedBlocks, 0);
   const totalBlocks = areaStats.reduce((sum, s) => sum + s.totalBlocks, 0);
@@ -482,7 +449,6 @@ export function WeeklyReviewPage() {
               <div className="grid grid-cols-1 gap-3">
                 {outcomes.map((outcome) => {
                   const isSelected = selectedOutcomes.includes(outcome.id);
-                  const area = outcome.area_id ? areas[outcome.area_id] : undefined;
                   return (
                     <button
                       key={outcome.id}
@@ -507,9 +473,9 @@ export function WeeklyReviewPage() {
                           {outcome.purpose && (
                             <p className="text-sm text-gray-600 mt-1 italic">{outcome.purpose}</p>
                           )}
-                          {area && (
+                          {(outcome as any).area && (
                             <span className="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                              {area.name}
+                              {(outcome as any).area.name}
                             </span>
                           )}
                         </div>

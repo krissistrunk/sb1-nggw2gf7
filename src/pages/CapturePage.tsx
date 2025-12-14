@@ -24,6 +24,7 @@ import type { InboxItem, ChunkWithItems, Area, Goal } from '../lib/database.type
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { GOAL_STATUS, OUTCOME_STATUS } from '../constants/status';
 
 type ViewMode = 'categorize' | 'chunk';
 
@@ -32,6 +33,7 @@ export function CapturePage() {
   const { organization } = useOrganization();
   const [items, setItems] = useState<InboxItem[]>([]);
   const [newItem, setNewItem] = useState('');
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('categorize');
   const [draggedItem, setDraggedItem] = useState<InboxItem | null>(null);
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
@@ -52,6 +54,7 @@ export function CapturePage() {
 
   const {
     chunks,
+    loading: chunksLoading,
     createChunk,
     updateChunk,
     deleteChunk,
@@ -70,16 +73,12 @@ export function CapturePage() {
   }, [user, organization]);
 
   const loadItems = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     try {
       const { data } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
+        .eq('user_id', user?.id)
+        .eq('organization_id', organization?.id)
         .eq('triaged', false)
         .is('chunk_id', null)
         .order('created_at', { ascending: false });
@@ -87,27 +86,24 @@ export function CapturePage() {
       setItems(data || []);
     } catch (error) {
       console.error('Error loading inbox items:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadAreasAndGoals = async () => {
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
-
     try {
       const { data: areasData } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .order('name');
 
       const { data: goalsData } = await supabase
         .from('goals')
         .select('*')
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId)
-        .eq('status', 'ACTIVE')
+        .eq('user_id', user?.id)
+        .eq('status', GOAL_STATUS.ACTIVE)
         .order('year', { ascending: false });
 
       setAreas(areasData || []);
@@ -120,14 +116,11 @@ export function CapturePage() {
   const handleCapture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.trim()) return;
-    const userId = user?.id;
-    const organizationId = organization?.id;
-    if (!userId || !organizationId) return;
 
     try {
       await supabase.from('inbox_items').insert({
-        user_id: userId,
-        organization_id: organizationId,
+        user_id: user?.id,
+        organization_id: organization?.id,
         content: newItem.trim(),
         item_type: 'NOTE',
         triaged: false,
@@ -146,6 +139,15 @@ export function CapturePage() {
       loadItems();
     } catch (error) {
       console.error('Error deleting item:', error);
+    }
+  };
+
+  const handleTypeChange = async (id: string, type: string) => {
+    try {
+      await supabase.from('inbox_items').update({ item_type: type }).eq('id', id);
+      loadItems();
+    } catch (error) {
+      console.error('Error updating item type:', error);
     }
   };
 
@@ -255,7 +257,7 @@ export function CapturePage() {
           purpose: formData.purpose,
           area_id: formData.area_id,
           goal_id: formData.goal_id || null,
-          status: 'ACTIVE',
+          status: OUTCOME_STATUS.ACTIVE,
           source_chunk_id: selectedChunk.id,
         })
         .select()
@@ -266,6 +268,7 @@ export function CapturePage() {
       for (const item of selectedChunk.items) {
         await supabase.from('actions').insert({
           outcome_id: outcome.id,
+          user_id: user?.id!,
           title: item.inbox_item.content,
           done: false,
           priority: 2,

@@ -3,10 +3,11 @@ import { Target, Plus, X, Save, Calendar, TrendingUp, CheckCircle2, Archive, Fil
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
-import type { Goal, Area, GoalInsert } from '../lib/database.types';
+import type { Goal, Area, GoalInsert, Outcome } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { GOAL_STATUS, OUTCOME_STATUS } from '../constants/status';
 
 type TabType = 'YEARLY' | 'QUARTERLY';
 
@@ -47,14 +48,11 @@ export function GoalsPage() {
   }, [user, organization, activeTab, showDrafts]);
 
   const loadAreas = async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
     try {
       const { data } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .order('name');
       setAreas(data || []);
     } catch (error) {
@@ -63,15 +61,12 @@ export function GoalsPage() {
   };
 
   const loadGoals = async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
     setLoading(true);
     try {
       let query = supabase
         .from('goals')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .eq('goal_type', activeTab);
 
       if (showDrafts) {
@@ -90,9 +85,9 @@ export function GoalsPage() {
         const { data: yearlyData } = await supabase
           .from('goals')
           .select('*')
-          .eq('user_id', userId)
+          .eq('user_id', user?.id)
           .eq('goal_type', 'YEARLY')
-          .eq('status', 'ACTIVE')
+          .eq('status', GOAL_STATUS.ACTIVE)
           .eq('is_draft', false)
           .order('year', { ascending: false });
         setYearlyGoals(yearlyData || []);
@@ -146,11 +141,22 @@ export function GoalsPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this goal?')) return;
+
+    try {
+      await supabase.from('goals').delete().eq('id', id);
+      loadGoals();
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+    }
+  };
+
   const handleArchive = async (id: string) => {
     try {
       await supabase
         .from('goals')
-        .update({ status: 'ARCHIVED', updated_at: new Date().toISOString() })
+        .update({ status: GOAL_STATUS.ARCHIVED, updated_at: new Date().toISOString() })
         .eq('id', id);
       loadGoals();
     } catch (error) {
@@ -365,7 +371,7 @@ export function GoalsPage() {
                             >
                               <Save className="w-4 h-4" />
                             </button>
-                            {goal.status === 'ACTIVE' && (
+                            {goal.status === GOAL_STATUS.ACTIVE && (
                               <button
                                 onClick={() => handleArchive(goal.id)}
                                 className="p-2 bg-gray-100 rounded-lg shadow-md text-gray-600 hover:bg-orange-500 hover:text-white transition-colors"
@@ -376,13 +382,13 @@ export function GoalsPage() {
                             )}
                           </div>
 
-                          {goal.status === 'COMPLETED' && (
+                          {goal.status === GOAL_STATUS.COMPLETED && (
                             <div className="absolute top-4 left-4">
                               <CheckCircle2 className="w-6 h-6 text-green-500" />
                             </div>
                           )}
 
-                          {goal.status === 'ARCHIVED' && (
+                          {goal.status === GOAL_STATUS.ARCHIVED && (
                             <div className="absolute top-4 left-4">
                               <Archive className="w-6 h-6 text-gray-400" />
                             </div>
@@ -394,7 +400,7 @@ export function GoalsPage() {
                             </div>
                           )}
 
-                          <div className={goal.status !== 'ACTIVE' || goal.is_draft ? 'pl-8' : ''}>
+                          <div className={goal.status !== GOAL_STATUS.ACTIVE || goal.is_draft ? 'pl-8' : ''}>
                             {goal.is_draft && (
                               <span className="inline-block px-3 py-1 bg-amber-100 text-amber-700 text-sm font-semibold rounded-full mb-3">
                                 DRAFT
@@ -505,8 +511,8 @@ export function GoalsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
-                  <textarea
-                  value={formData.description ?? ''}
+                <textarea
+                  value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Describe this goal in more detail..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -556,7 +562,7 @@ export function GoalsPage() {
                   Area of Focus
                 </label>
                 <select
-                  value={formData.area_id ?? ''}
+                  value={formData.area_id}
                   onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >

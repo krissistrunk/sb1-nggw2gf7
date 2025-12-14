@@ -3,10 +3,11 @@ import { Calendar } from 'lucide-react';
 import { WeeklyPlanner } from '../components/WeeklyPlanner';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import type { Action, Area, Outcome, OutcomeWithRelations } from '../lib/database.types';
+import type { OutcomeWithRelations } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { OUTCOME_STATUS } from '../constants/status';
 
 export function WeekPage() {
   const { user } = useAuth();
@@ -28,55 +29,39 @@ export function WeekPage() {
   }, [user]);
 
   const loadOutcomes = async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
     try {
-      const { data: outcomesData, error: outcomesError } = await supabase
+      const { data: outcomesData } = await supabase
         .from('outcomes')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'ACTIVE')
+        .select(`
+          *,
+          areas (*)
+        `)
+        .eq('user_id', user?.id)
+        .eq('status', OUTCOME_STATUS.ACTIVE)
         .order('created_at', { ascending: false });
 
-      if (outcomesError) throw outcomesError;
-      if (!outcomesData || outcomesData.length === 0) {
+      if (!outcomesData) {
         setOutcomes([]);
         setLoading(false);
         return;
       }
 
-      const outcomeIds = outcomesData.map((o) => o.id);
-      const areaIds = Array.from(
-        new Set(outcomesData.map((o) => o.area_id).filter((id): id is string => Boolean(id)))
+      const outcomesWithActions = await Promise.all(
+        outcomesData.map(async (outcome) => {
+          const { data: actionsData } = await supabase
+            .from('actions')
+            .select('*')
+            .eq('outcome_id', outcome.id)
+            .order('created_at', { ascending: false });
+
+          return {
+            ...outcome,
+            actions: actionsData || [],
+          } as OutcomeWithRelations;
+        })
       );
 
-      const [{ data: actionsData, error: actionsError }, { data: areasData, error: areasError }] =
-        await Promise.all([
-          supabase.from('actions').select('*').in('outcome_id', outcomeIds).order('created_at', { ascending: false }),
-          areaIds.length ? supabase.from('areas').select('*').in('id', areaIds) : Promise.resolve({ data: [] as Area[], error: null }),
-        ]);
-
-      if (actionsError) throw actionsError;
-      if (areasError) throw areasError;
-
-      const actionsByOutcomeId = new Map<string, Action[]>();
-      for (const action of actionsData || []) {
-        const list = actionsByOutcomeId.get(action.outcome_id) || [];
-        list.push(action);
-        actionsByOutcomeId.set(action.outcome_id, list);
-      }
-
-      const areasById = new Map<string, Area>((areasData || []).map((a) => [a.id, a]));
-
-      const outcomesWithRelations: OutcomeWithRelations[] = (outcomesData as Outcome[]).map((outcome) => ({
-        ...outcome,
-        area: outcome.area_id ? areasById.get(outcome.area_id) || null : null,
-        goal: null,
-        actions: actionsByOutcomeId.get(outcome.id) || [],
-      }));
-
-      setOutcomes(outcomesWithRelations);
+      setOutcomes(outcomesWithActions);
     } catch (error) {
       console.error('Error loading outcomes:', error);
     } finally {

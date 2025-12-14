@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Package, Loader2, X } from 'lucide-react';
+import { Sparkles, Package, Loader2, X, Check } from 'lucide-react';
 import { aiService, AIChunkSuggestions as ChunkSuggestionsType } from '../lib/ai-service';
 
 interface AIChunkSuggestionsProps {
@@ -103,14 +103,19 @@ export function AIChunkSuggestions({ inboxItems, onChunksCreated }: AIChunkSugge
                       </div>
                       <p className="text-sm text-gray-700 mb-2">{chunk.description}</p>
                       <p className="text-xs text-gray-600 italic mb-2">{chunk.reasoning}</p>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 mb-2">
                         Items: {chunk.item_indices.map(i => inboxItems[i]?.content.substring(0, 30)).join(', ')}...
                       </div>
                       {chunk.suggested_outcome_title && (
-                        <div className="mt-2 p-2 bg-green-50 rounded">
-                          <p className="text-xs font-semibold text-green-900">
+                        <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-xs font-semibold text-green-900 mb-1">
                             Suggested Outcome: {chunk.suggested_outcome_title}
                           </p>
+                          {chunk.suggested_purpose && (
+                            <p className="text-xs text-green-800 italic">
+                              Purpose: {chunk.suggested_purpose}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

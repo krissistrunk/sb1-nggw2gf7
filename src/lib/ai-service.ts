@@ -76,6 +76,7 @@ export interface AIChunkSuggestion {
   should_convert: boolean;
   reasoning: string;
   suggested_outcome_title?: string;
+  suggested_purpose?: string;
 }
 
 export interface AIChunkSuggestions {
@@ -92,8 +93,7 @@ class AIService {
       throw new Error('Not authenticated');
     }
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321';
-    const apiUrl = `${supabaseUrl}/functions/v1/ai-assistant`;
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -183,7 +183,7 @@ class AIService {
 
   async transcribeVoice(
     audioData: string,
-    sessionType: 'PLANNING' | 'COACHING' | 'REFLECTION' | 'MOTIVATION' | 'CLARIFICATION'
+    sessionType: 'PLANNING' | 'COACHING' | 'REFLECTION'
   ): Promise<AIVoiceAnalysis> {
     return await this.callEdgeFunction('transcribe-voice', {
       audioData,

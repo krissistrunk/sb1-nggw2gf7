@@ -7,6 +7,7 @@ import type { Outcome, Action, Goal, TimeBlock } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { OUTCOME_STATUS } from '../constants/status';
 
 export function MonthlyReviewPage() {
   const { user } = useAuth();
@@ -106,8 +107,8 @@ export function MonthlyReviewPage() {
 
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  const completedActions = actions.filter(a => a.status === 'COMPLETED' || a.done);
-  const completedOutcomes = outcomes.filter(o => o.status === 'COMPLETED');
+  const completedActions = actions.filter((a: any) => a.status === 'COMPLETED' || a.done);
+  const completedOutcomes = outcomes.filter(o => o.status === OUTCOME_STATUS.COMPLETED);
   const totalFocusMinutes = timeBlocks.reduce((sum, block) => sum + block.duration_minutes, 0);
   const totalFocusHours = Math.round(totalFocusMinutes / 60);
   const avgGoalProgress = goals.length > 0

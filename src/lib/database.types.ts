@@ -6,25 +6,9 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Relationship = {
-  foreignKeyName: string
-  columns: string[]
-  referencedRelation: string
-  referencedColumns: string[]
-  isOneToOne: boolean
-}
-
-type TablesWithRelationships<
-  T extends Record<string, { Row: unknown; Insert: unknown; Update: unknown }>
-> = {
-  [K in keyof T]: T[K] & { Relationships: Relationship[] }
-}
-
-type EmptyRecord = { [_ in never]: never }
-
 export type Database = {
   public: {
-    Tables: TablesWithRelationships<{
+    Tables: {
       organizations: {
         Row: {
           id: string
@@ -68,6 +52,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       organization_members: {
         Row: {
@@ -97,6 +82,7 @@ export type Database = {
           joined_at?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       users: {
         Row: {
@@ -104,9 +90,6 @@ export type Database = {
           email: string
           name: string | null
           organization_id: string | null
-          voice_coach_auto_delay_seconds: number | null
-          voice_coach_silence_timeout: number | null
-          voice_coach_audio_cues: boolean | null
           settings: Json
           created_at: string
         }
@@ -115,9 +98,6 @@ export type Database = {
           email: string
           name?: string | null
           organization_id?: string | null
-          voice_coach_auto_delay_seconds?: number | null
-          voice_coach_silence_timeout?: number | null
-          voice_coach_audio_cues?: boolean | null
           settings?: Json
           created_at?: string
         }
@@ -126,12 +106,10 @@ export type Database = {
           email?: string
           name?: string | null
           organization_id?: string | null
-          voice_coach_auto_delay_seconds?: number | null
-          voice_coach_silence_timeout?: number | null
-          voice_coach_audio_cues?: boolean | null
           settings?: Json
           created_at?: string
         }
+        Relationships: []
       }
       life_plans: {
         Row: {
@@ -173,6 +151,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       goals: {
         Row: {
@@ -186,7 +165,7 @@ export type Database = {
           year: number
           quarter: number | null
           parent_goal_id: string | null
-          status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status: 'active' | 'completed' | 'archived'
           target_date: string | null
           progress_percentage: number
           is_draft: boolean
@@ -205,7 +184,7 @@ export type Database = {
           year: number
           quarter?: number | null
           parent_goal_id?: string | null
-          status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status?: 'active' | 'completed' | 'archived'
           target_date?: string | null
           progress_percentage?: number
           is_draft?: boolean
@@ -224,7 +203,7 @@ export type Database = {
           year?: number
           quarter?: number | null
           parent_goal_id?: string | null
-          status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status?: 'active' | 'completed' | 'archived'
           target_date?: string | null
           progress_percentage?: number
           is_draft?: boolean
@@ -232,6 +211,7 @@ export type Database = {
           updated_at?: string
           completed_at?: string | null
         }
+        Relationships: []
       }
       areas: {
         Row: {
@@ -243,9 +223,6 @@ export type Database = {
           quarterly_focus: boolean
           color: string
           icon: string
-          background_image_url: string | null
-          identity_statement: string | null
-          color_hex: string | null
           user_id: string
           organization_id: string | null
           sort_order: number
@@ -260,9 +237,6 @@ export type Database = {
           quarterly_focus?: boolean
           color?: string
           icon?: string
-          background_image_url?: string | null
-          identity_statement?: string | null
-          color_hex?: string | null
           user_id: string
           organization_id?: string | null
           sort_order?: number
@@ -277,14 +251,12 @@ export type Database = {
           quarterly_focus?: boolean
           color?: string
           icon?: string
-          background_image_url?: string | null
-          identity_statement?: string | null
-          color_hex?: string | null
           user_id?: string
           organization_id?: string | null
           sort_order?: number
           created_at?: string
         }
+        Relationships: []
       }
       outcomes: {
         Row: {
@@ -295,13 +267,13 @@ export type Database = {
           power_statement: string | null
           metric: string | null
           target_date: string | null
-          status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status: 'active' | 'completed' | 'archived'
           area_id: string | null
           goal_id: string | null
-          source_chunk_id: string | null
           user_id: string
           organization_id: string | null
           is_draft: boolean
+          source_chunk_id: string | null
           created_at: string
           updated_at: string
           completed_at: string | null
@@ -314,13 +286,13 @@ export type Database = {
           power_statement?: string | null
           metric?: string | null
           target_date?: string | null
-          status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status?: 'active' | 'completed' | 'archived'
           area_id?: string | null
           goal_id?: string | null
-          source_chunk_id?: string | null
           user_id: string
           organization_id?: string | null
           is_draft?: boolean
+          source_chunk_id?: string | null
           created_at?: string
           updated_at?: string
           completed_at?: string | null
@@ -333,23 +305,23 @@ export type Database = {
           power_statement?: string | null
           metric?: string | null
           target_date?: string | null
-          status?: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED'
+          status?: 'active' | 'completed' | 'archived'
           area_id?: string | null
           goal_id?: string | null
-          source_chunk_id?: string | null
           user_id?: string
           organization_id?: string | null
           is_draft?: boolean
+          source_chunk_id?: string | null
           created_at?: string
           updated_at?: string
           completed_at?: string | null
         }
+        Relationships: []
       }
       actions: {
         Row: {
           id: string
           outcome_id: string
-          area_id: string | null
           user_id: string | null
           title: string
           notes: string | null
@@ -357,21 +329,18 @@ export type Database = {
           priority: 1 | 2 | 3
           scheduled_date: string | null
           scheduled_time: string | null
-          estimated_minutes: number | null
           duration_minutes: number
-          is_priority: boolean | null
           is_must: boolean
           delegated_to: string | null
           delegated_date: string | null
-          result_notes: string | null
           sort_order: number
+          source_chunk_item_id: string | null
           created_at: string
           completed_at: string | null
         }
         Insert: {
           id?: string
           outcome_id: string
-          area_id?: string | null
           user_id?: string | null
           title: string
           notes?: string | null
@@ -379,21 +348,18 @@ export type Database = {
           priority?: 1 | 2 | 3
           scheduled_date?: string | null
           scheduled_time?: string | null
-          estimated_minutes?: number | null
           duration_minutes?: number
-          is_priority?: boolean | null
           is_must?: boolean
           delegated_to?: string | null
           delegated_date?: string | null
-          result_notes?: string | null
           sort_order?: number
+          source_chunk_item_id?: string | null
           created_at?: string
           completed_at?: string | null
         }
         Update: {
           id?: string
           outcome_id?: string
-          area_id?: string | null
           user_id?: string | null
           title?: string
           notes?: string | null
@@ -401,17 +367,16 @@ export type Database = {
           priority?: 1 | 2 | 3
           scheduled_date?: string | null
           scheduled_time?: string | null
-          estimated_minutes?: number | null
           duration_minutes?: number
-          is_priority?: boolean | null
           is_must?: boolean
           delegated_to?: string | null
           delegated_date?: string | null
-          result_notes?: string | null
           sort_order?: number
+          source_chunk_item_id?: string | null
           created_at?: string
           completed_at?: string | null
         }
+        Relationships: []
       }
       inbox_items: {
         Row: {
@@ -422,7 +387,6 @@ export type Database = {
           item_type: 'NOTE' | 'ACTION_IDEA' | 'OUTCOME_IDEA'
           triaged: boolean
           triaged_to_id: string | null
-          chunk_id: string | null
           created_at: string
         }
         Insert: {
@@ -433,7 +397,6 @@ export type Database = {
           item_type?: 'NOTE' | 'ACTION_IDEA' | 'OUTCOME_IDEA'
           triaged?: boolean
           triaged_to_id?: string | null
-          chunk_id?: string | null
           created_at?: string
         }
         Update: {
@@ -444,9 +407,9 @@ export type Database = {
           item_type?: 'NOTE' | 'ACTION_IDEA' | 'OUTCOME_IDEA'
           triaged?: boolean
           triaged_to_id?: string | null
-          chunk_id?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       review_sessions: {
         Row: {
@@ -479,6 +442,7 @@ export type Database = {
           insights?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       weekly_plans: {
         Row: {
@@ -511,6 +475,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       daily_notes: {
         Row: {
@@ -546,6 +511,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       voice_sessions: {
         Row: {
@@ -578,6 +544,7 @@ export type Database = {
           duration_seconds?: number
           created_at?: string
         }
+        Relationships: []
       }
       outcome_templates: {
         Row: {
@@ -622,6 +589,7 @@ export type Database = {
           usage_count?: number
           created_at?: string
         }
+        Relationships: []
       }
       time_blocks: {
         Row: {
@@ -693,6 +661,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       chunks: {
         Row: {
@@ -737,6 +706,7 @@ export type Database = {
           updated_at?: string
           converted_at?: string | null
         }
+        Relationships: []
       }
       chunk_items: {
         Row: {
@@ -760,6 +730,7 @@ export type Database = {
           sort_order?: number
           created_at?: string
         }
+        Relationships: []
       }
       page_backgrounds: {
         Row: {
@@ -768,9 +739,9 @@ export type Database = {
           organization_id: string
           page_identifier: string
           image_url: string
-          image_position: string | null
-          overlay_opacity: number | null
-          is_active: boolean | null
+          image_position: string
+          overlay_opacity: number
+          is_active: boolean
           created_at: string
           updated_at: string
         }
@@ -780,9 +751,9 @@ export type Database = {
           organization_id: string
           page_identifier: string
           image_url: string
-          image_position?: string | null
-          overlay_opacity?: number | null
-          is_active?: boolean | null
+          image_position?: string
+          overlay_opacity?: number
+          is_active?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -792,205 +763,27 @@ export type Database = {
           organization_id?: string
           page_identifier?: string
           image_url?: string
-          image_position?: string | null
-          overlay_opacity?: number | null
-          is_active?: boolean | null
+          image_position?: string
+          overlay_opacity?: number
+          is_active?: boolean
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
-      knowledge_notes: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          title: string
-          content: string
-          note_type: 'permanent' | 'fleeting' | 'literature' | 'insight' | 'pattern' | 'learning'
-          source_type:
-            | 'coaching_session'
-            | 'manual'
-            | 'ai_generated'
-            | 'weekly_review'
-            | 'daily_reflection'
-            | 'outcome_completion'
-          source_id: string | null
-          metadata: Json
-          created_at: string
-          updated_at: string
-          last_referenced_at: string
-          reference_count: number
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          title: string
-          content?: string
-          note_type?: 'permanent' | 'fleeting' | 'literature' | 'insight' | 'pattern' | 'learning'
-          source_type?:
-            | 'coaching_session'
-            | 'manual'
-            | 'ai_generated'
-            | 'weekly_review'
-            | 'daily_reflection'
-            | 'outcome_completion'
-          source_id?: string | null
-          metadata?: Json
-          created_at?: string
-          updated_at?: string
-          last_referenced_at?: string
-          reference_count?: number
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          title?: string
-          content?: string
-          note_type?: 'permanent' | 'fleeting' | 'literature' | 'insight' | 'pattern' | 'learning'
-          source_type?:
-            | 'coaching_session'
-            | 'manual'
-            | 'ai_generated'
-            | 'weekly_review'
-            | 'daily_reflection'
-            | 'outcome_completion'
-          source_id?: string | null
-          metadata?: Json
-          created_at?: string
-          updated_at?: string
-          last_referenced_at?: string
-          reference_count?: number
-        }
-      }
-      knowledge_links: {
-        Row: {
-          id: string
-          user_id: string
-          from_note_id: string
-          to_note_id: string
-          link_type:
-            | 'relates_to'
-            | 'contradicts'
-            | 'supports'
-            | 'example_of'
-            | 'caused_by'
-            | 'leads_to'
-          strength: number | null
-          created_by: 'user' | 'ai'
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          from_note_id: string
-          to_note_id: string
-          link_type?:
-            | 'relates_to'
-            | 'contradicts'
-            | 'supports'
-            | 'example_of'
-            | 'caused_by'
-            | 'leads_to'
-          strength?: number | null
-          created_by?: 'user' | 'ai'
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          from_note_id?: string
-          to_note_id?: string
-          link_type?:
-            | 'relates_to'
-            | 'contradicts'
-            | 'supports'
-            | 'example_of'
-            | 'caused_by'
-            | 'leads_to'
-          strength?: number | null
-          created_by?: 'user' | 'ai'
-          created_at?: string
-        }
-      }
-      knowledge_tags: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          tag_name: string
-          category: string | null
-          color: string
-          note_count: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          tag_name: string
-          category?: string | null
-          color?: string
-          note_count?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          tag_name?: string
-          category?: string | null
-          color?: string
-          note_count?: number
-          created_at?: string
-        }
-      }
-      knowledge_note_tags: {
-        Row: {
-          note_id: string
-          tag_id: string
-          created_at: string
-        }
-        Insert: {
-          note_id: string
-          tag_id: string
-          created_at?: string
-        }
-        Update: {
-          note_id?: string
-          tag_id?: string
-          created_at?: string
-        }
-      }
-      knowledge_embeddings: {
-        Row: {
-          id: string
-          note_id: string
-          embedding: string | null
-          embedding_model: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          note_id: string
-          embedding?: string | null
-          embedding_model?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          note_id?: string
-          embedding?: string | null
-          embedding_model?: string
-          created_at?: string
-        }
-      }
-    }>
-    Views: EmptyRecord
-    Functions: EmptyRecord
-    Enums: EmptyRecord
-    CompositeTypes: EmptyRecord
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
@@ -1010,6 +803,7 @@ export type OutcomeTemplate = Database['public']['Tables']['outcome_templates'][
 export type TimeBlock = Database['public']['Tables']['time_blocks']['Row']
 export type Chunk = Database['public']['Tables']['chunks']['Row']
 export type ChunkItem = Database['public']['Tables']['chunk_items']['Row']
+export type PageBackground = Database['public']['Tables']['page_backgrounds']['Row']
 
 export type OutcomeWithRelations = Outcome & {
   area: Area | null

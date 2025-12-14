@@ -2,39 +2,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import Anthropic from "npm:@anthropic-ai/sdk@0.32.1";
 
-// CORS Configuration - Secure Origin Validation
-// Set ALLOWED_ORIGINS in Supabase Edge Function environment variables
-// Example: "https://myapp.com,https://staging.myapp.com"
-const getAllowedOrigins = (): string[] => {
-  const originsEnv = Deno.env.get("ALLOWED_ORIGINS");
-  if (originsEnv) {
-    return originsEnv.split(",").map(o => o.trim());
-  }
-  // Default: allow local development only (secure fallback)
-  return ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"];
-};
-
-const getCorsHeaders = (requestOrigin: string | null): Record<string, string> => {
-  const allowedOrigins = getAllowedOrigins();
-  const origin = requestOrigin || "";
-
-  // Validate origin against allowed list
-  const isAllowed = allowedOrigins.some(allowed => {
-    // Exact match or wildcard subdomain match (e.g., "*.myapp.com")
-    if (allowed.startsWith("*.")) {
-      const domain = allowed.slice(2);
-      return origin.endsWith(domain) || origin.endsWith(`.${domain}`);
-    }
-    return origin === allowed;
-  });
-
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-    "Access-Control-Allow-Credentials": "true",
-    "Vary": "Origin",
-  };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 interface AIRequest {
@@ -43,12 +14,9 @@ interface AIRequest {
 }
 
 Deno.serve(async (req: Request) => {
-  const requestOrigin = req.headers.get("Origin");
-  const corsHeaders = getCorsHeaders(requestOrigin);
-
   if (req.method === "OPTIONS") {
     return new Response(null, {
-      status: 204,
+      status: 200,
       headers: corsHeaders,
     });
   }
@@ -550,28 +518,55 @@ async function suggestChunks(apiKey: string, data: any) {
   const messages = [
     {
       role: "system",
-      content: "You are an expert at organizing and grouping related items. Analyze inbox items and suggest logical groupings (chunks) based on themes, projects, or areas of life. Recommend which chunks should become outcomes.",
+      content: `You are a productivity expert specializing in Tony Robbins' RPM (Results-focused, Purpose-driven, Massive Action Plan) methodology. Your role is to analyze inbox items and suggest outcome-oriented groupings.
+
+KEY RPM PRINCIPLES:
+1. Focus on RESULTS, not tasks - Group items by the outcome they contribute to, not by category
+2. Each chunk should represent a meaningful RESULT someone wants to achieve
+3. The purpose (WHY) should be emotionally compelling and personally meaningful
+4. Avoid generic categories like "work tasks" or "household chores"
+5. Look for the underlying result that multiple actions are trying to achieve
+
+CHUNKING STRATEGY:
+- Group items that contribute to the SAME RESULT, even if they seem unrelated
+- A chunk named "Complete project X" is better than "Project X tasks"
+- A chunk named "Create healthy family connection" is better than "Family activities"
+- Prioritize outcome-oriented names that describe the desired END STATE
+- If items don't clearly contribute to a meaningful result, leave them ungrouped
+
+QUALITY OVER QUANTITY:
+- Better to have 2-3 meaningful result-focused chunks than 5-6 category-based groups
+- Only suggest chunks where the connection to a real outcome is clear
+- Each chunk should answer "What result am I after?"`,
     },
     {
       role: "user",
-      content: `Analyze these inbox items and suggest how to group them into chunks:
+      content: `Analyze these inbox items and suggest how to group them into RPM-style outcome chunks:
 
-${inboxItems.map((item: any, i: number) => `${i + 1}. ${item.content} (${item.item_type})`).join("\n")}
+${inboxItems.map((item: any, i: number) => `${i}. ${item.content} (${item.item_type})`).join("\n")}
+
+Guidelines:
+- Group items by the RESULT they achieve, not by topic or category
+- Use result-oriented names (e.g., "Launch new website successfully" not "Website tasks")
+- Only create chunks where there's a clear, meaningful outcome
+- Provide compelling purpose statements that explain WHY this outcome matters
+- Recommend conversion to outcome when the chunk represents a substantial result
 
 Format as JSON:
 {
   "suggested_chunks": [
     {
-      "name": "chunk name",
-      "description": "what this chunk is about",
+      "name": "Result-focused name describing the outcome",
+      "description": "What result this achieves and why it matters",
       "item_indices": [0, 2, 5],
       "should_convert": true/false,
-      "reasoning": "why group these together",
-      "suggested_outcome_title": "if converting to outcome"
+      "reasoning": "How these items work together to achieve this specific result",
+      "suggested_outcome_title": "Compelling outcome title if should_convert is true",
+      "suggested_purpose": "Emotionally compelling reason WHY this outcome matters"
     }
   ],
   "ungrouped_items": [1, 3],
-  "overall_advice": "general guidance"
+  "overall_advice": "RPM-focused guidance on organizing for results"
 }
 
 Return ONLY the JSON, no additional text.`,

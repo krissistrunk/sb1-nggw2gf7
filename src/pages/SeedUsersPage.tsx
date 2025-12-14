@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { subDays, subMonths, format, startOfWeek, addDays } from 'date-fns';
+import { OUTCOME_STATUS } from '../constants/status';
 
 const TWO_YEARS_AGO = subDays(new Date(), 730);
 const TODAY = new Date();
@@ -231,7 +232,11 @@ export function SeedUsersPage() {
         power_statement: 'Sample power statement',
         metric: `Complete by ${format(targetDate, 'MMM yyyy')}`,
         target_date: targetDate.toISOString().split('T')[0],
-        status: isCompleted ? 'COMPLETED' : shouldInclude(0.1) ? 'ARCHIVED' : 'ACTIVE',
+        status: isCompleted
+          ? OUTCOME_STATUS.COMPLETED
+          : shouldInclude(0.1)
+            ? OUTCOME_STATUS.ARCHIVED
+            : OUTCOME_STATUS.ACTIVE,
         created_at: createdAt.toISOString(),
         completed_at: isCompleted ? targetDate.toISOString() : null
       });

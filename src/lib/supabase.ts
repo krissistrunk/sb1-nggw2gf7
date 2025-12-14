@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from './database.types';
 
 // Check if mock mode is enabled
 export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
@@ -12,7 +11,7 @@ if (!USE_MOCK_DATA && (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VI
   console.error('Missing Supabase environment variables. Set VITE_USE_MOCK_DATA=true to use mock data instead.');
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: !USE_MOCK_DATA,
     autoRefreshToken: !USE_MOCK_DATA,

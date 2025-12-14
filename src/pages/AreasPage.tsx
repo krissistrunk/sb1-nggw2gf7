@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
+import { OUTCOME_STATUS } from '../constants/status';
 
 const ICON_OPTIONS = [
   { name: 'Heart', icon: Heart },
@@ -34,10 +35,10 @@ interface Area {
   icon: string;
   color: string;
   outcome_count?: number;
-  background_image_url?: string | null;
-  description?: string | null;
-  identity_statement?: string | null;
-  color_hex?: string | null;
+  background_image_url?: string;
+  description?: string;
+  identity_statement?: string;
+  color_hex?: string;
   sort_order?: number;
 }
 
@@ -71,15 +72,12 @@ export function AreasPage() {
   }, [user]);
 
   const loadAreas = async () => {
-    const userId = user?.id;
-    if (!userId) return;
-
     try {
       setLoading(true);
       const { data: areasData } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', user?.id)
         .order('sort_order', { ascending: true })
         .order('name');
 
@@ -89,7 +87,7 @@ export function AreasPage() {
             .from('outcomes')
             .select('*', { count: 'exact', head: true })
             .eq('area_id', area.id)
-            .eq('status', 'ACTIVE');
+            .eq('status', OUTCOME_STATUS.ACTIVE);
 
           return { ...area, outcome_count: count || 0 };
         })
@@ -121,11 +119,8 @@ export function AreasPage() {
           })
           .eq('id', editingArea.id);
       } else {
-        const userId = user?.id;
-        if (!userId) return;
-
         await supabase.from('areas').insert({
-          user_id: userId,
+          user_id: user?.id,
           name: formData.name,
           icon: formData.icon,
           color: formData.color,
