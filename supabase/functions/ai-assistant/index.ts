@@ -2,10 +2,39 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import Anthropic from "npm:@anthropic-ai/sdk@0.32.1";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+// CORS Configuration - Secure Origin Validation
+// Set ALLOWED_ORIGINS in Supabase Edge Function environment variables
+// Example: "https://myapp.com,https://staging.myapp.com"
+const getAllowedOrigins = (): string[] => {
+  const originsEnv = Deno.env.get("ALLOWED_ORIGINS");
+  if (originsEnv) {
+    return originsEnv.split(",").map(o => o.trim());
+  }
+  // Default: allow local development only (secure fallback)
+  return ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"];
+};
+
+const getCorsHeaders = (requestOrigin: string | null): Record<string, string> => {
+  const allowedOrigins = getAllowedOrigins();
+  const origin = requestOrigin || "";
+
+  // Validate origin against allowed list
+  const isAllowed = allowedOrigins.some(allowed => {
+    // Exact match or wildcard subdomain match (e.g., "*.myapp.com")
+    if (allowed.startsWith("*.")) {
+      const domain = allowed.slice(2);
+      return origin.endsWith(domain) || origin.endsWith(`.${domain}`);
+    }
+    return origin === allowed;
+  });
+
+  return {
+    "Access-Control-Allow-Origin": isAllowed ? origin : allowedOrigins[0],
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
 };
 
 interface AIRequest {
@@ -14,9 +43,12 @@ interface AIRequest {
 }
 
 Deno.serve(async (req: Request) => {
+  const requestOrigin = req.headers.get("Origin");
+  const corsHeaders = getCorsHeaders(requestOrigin);
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
-      status: 200,
+      status: 204,
       headers: corsHeaders,
     });
   }

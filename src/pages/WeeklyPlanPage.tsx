@@ -4,6 +4,7 @@ import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { ChevronLeft, ChevronRight, Star, Clock, Check, MoreVertical, Calendar as CalendarIcon, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 import { Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile } from 'lucide-react';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
@@ -30,25 +31,25 @@ interface Area {
   name: string;
   icon: string;
   color: string;
-  color_hex?: string;
+  color_hex?: string | null;
 }
 
 interface Action {
   id: string;
   title: string;
-  area_id?: string;
-  outcome_id?: string;
-  scheduled_date?: string;
-  scheduled_time?: string;
-  estimated_minutes?: number;
-  is_priority?: boolean;
-  completed?: boolean;
-  result_notes?: string;
+  area_id?: string | null;
+  outcome_id?: string | null;
+  scheduled_date?: string | null;
+  scheduled_time?: string | null;
+  estimated_minutes?: number | null;
+  is_priority?: boolean | null;
+  done?: boolean;
+  result_notes?: string | null;
 }
 
 interface TimeBlock {
   id: string;
-  action_id?: string;
+  action_id?: string | null;
   title: string;
   scheduled_start: string;
   scheduled_end: string;
@@ -60,6 +61,7 @@ interface TimeBlock {
 
 export function WeeklyPlanPage() {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [areas, setAreas] = useState<Area[]>([]);
   const [unscheduledActions, setUnscheduledActions] = useState<Action[]>([]);
@@ -87,10 +89,10 @@ export function WeeklyPlanPage() {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   useEffect(() => {
-    if (user) {
+    if (user && organization) {
       loadData();
     }
-  }, [user, currentWeek]);
+  }, [user, organization, currentWeek]);
 
   const loadData = async () => {
     await Promise.all([
@@ -101,11 +103,14 @@ export function WeeklyPlanPage() {
   };
 
   const loadAreas = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('sort_order', { ascending: true })
         .order('name');
 
@@ -117,12 +122,15 @@ export function WeeklyPlanPage() {
   };
 
   const loadUnscheduledActions = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data } = await supabase
         .from('actions')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('completed', false)
+        .eq('user_id', userId)
+        .eq('done', false)
         .is('scheduled_date', null)
         .order('is_priority', { ascending: false })
         .order('created_at', { ascending: false });
@@ -134,33 +142,55 @@ export function WeeklyPlanPage() {
   };
 
   const loadTimeBlocks = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       const weekEnd = addDays(weekStart, 7);
 
-      const { data } = await supabase
+      const { data: blocks, error: blocksError } = await supabase
         .from('time_blocks')
-        .select('*, actions(*)')
-        .eq('user_id', user?.id)
+        .select('*')
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .gte('scheduled_start', weekStart.toISOString())
         .lt('scheduled_start', weekEnd.toISOString())
         .order('scheduled_start');
 
-      const blocksWithAreas = await Promise.all(
-        (data || []).map(async (block) => {
-          if (block.actions?.area_id) {
-            const { data: area } = await supabase
-              .from('areas')
-              .select('*')
-              .eq('id', block.actions.area_id)
-              .single();
+      if (blocksError) throw blocksError;
 
-            return { ...block, action: block.actions, area };
-          }
-          return { ...block, action: block.actions };
-        })
+      const actionIds = Array.from(
+        new Set((blocks || []).map((b) => b.action_id).filter((id): id is string => Boolean(id)))
       );
 
-      setTimeBlocks(blocksWithAreas as TimeBlock[]);
+      const { data: actionsData, error: actionsError } = actionIds.length
+        ? await supabase.from('actions').select('*').in('id', actionIds)
+        : { data: [] as Action[], error: null };
+
+      if (actionsError) throw actionsError;
+
+      const actionsById = new Map<string, Action>((actionsData || []).map((a) => [a.id, a]));
+
+      const areaIds = Array.from(
+        new Set((actionsData || []).map((a) => a.area_id).filter((id): id is string => Boolean(id)))
+      );
+
+      const { data: areasData, error: areasError } = areaIds.length
+        ? await supabase.from('areas').select('*').in('id', areaIds)
+        : { data: [] as Area[], error: null };
+
+      if (areasError) throw areasError;
+
+      const areasById = new Map<string, Area>((areasData || []).map((a) => [a.id, a]));
+
+      const blocksWithAreas: TimeBlock[] = (blocks || []).map((block) => {
+        const action = block.action_id ? actionsById.get(block.action_id) : undefined;
+        const area = action?.area_id ? areasById.get(action.area_id) : undefined;
+        return { ...block, action, area };
+      });
+
+      setTimeBlocks(blocksWithAreas);
     } catch (error) {
       console.error('Error loading time blocks:', error);
     }
@@ -196,6 +226,9 @@ export function WeeklyPlanPage() {
 
   const handleDrop = async (date: Date, timeSlot: string) => {
     if (!draggedAction) return;
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
 
     const [hours, minutes] = timeSlot.split(':').map(Number);
     const scheduledStart = new Date(date);
@@ -206,9 +239,10 @@ export function WeeklyPlanPage() {
 
     try {
       await supabase.from('time_blocks').insert({
-        user_id: user?.id,
-        organization_id: (await supabase.auth.getUser()).data.user?.user_metadata?.organization_id,
+        user_id: userId,
+        organization_id: organizationId,
         action_id: draggedAction.id,
+        outcome_id: draggedAction.outcome_id ?? null,
         title: draggedAction.title,
         scheduled_start: scheduledStart.toISOString(),
         scheduled_end: scheduledEnd.toISOString(),
@@ -261,6 +295,9 @@ export function WeeklyPlanPage() {
 
   const handleCreateTimeBlock = async () => {
     if (!newTimeBlock.title.trim()) return;
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
 
     try {
       const [hours, minutes] = newTimeBlock.startTime.split(':').map(Number);
@@ -270,7 +307,8 @@ export function WeeklyPlanPage() {
       const scheduledEnd = new Date(scheduledStart.getTime() + newTimeBlock.duration * 60000);
 
       await supabase.from('time_blocks').insert({
-        user_id: user?.id,
+        user_id: userId,
+        organization_id: organizationId,
         title: newTimeBlock.title,
         scheduled_start: scheduledStart.toISOString(),
         scheduled_end: scheduledEnd.toISOString(),

@@ -85,14 +85,15 @@ export interface AIChunkSuggestions {
 }
 
 class AIService {
-  private async callEdgeFunction(feature: string, data: Record<string, any>) {
+  async callEdgeFunction(feature: string, data: Record<string, any>) {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
       throw new Error('Not authenticated');
     }
 
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321';
+    const apiUrl = `${supabaseUrl}/functions/v1/ai-assistant`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -182,7 +183,7 @@ class AIService {
 
   async transcribeVoice(
     audioData: string,
-    sessionType: 'PLANNING' | 'COACHING' | 'REFLECTION'
+    sessionType: 'PLANNING' | 'COACHING' | 'REFLECTION' | 'MOTIVATION' | 'CLARIFICATION'
   ): Promise<AIVoiceAnalysis> {
     return await this.callEdgeFunction('transcribe-voice', {
       audioData,

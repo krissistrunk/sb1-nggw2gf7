@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Target, Heart, Briefcase, DollarSign, Users, BookOpen, Sparkles, Smile, type LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
-const ICON_MAP: Record<string, any> = {
+import type { Area as AreaRow } from '../lib/database.types';
+
+const ICON_MAP: Record<string, LucideIcon> = {
   Heart,
   Briefcase,
   DollarSign,
@@ -15,15 +17,6 @@ const ICON_MAP: Record<string, any> = {
   Target,
 };
 
-interface Area {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  color_hex?: string;
-  sort_order?: number;
-}
-
 interface CategorySidebarProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -32,7 +25,7 @@ interface CategorySidebarProps {
 export function CategorySidebar({ isOpen, onToggle }: CategorySidebarProps) {
   const { user } = useAuth();
   const location = useLocation();
-  const [areas, setAreas] = useState<Area[]>([]);
+  const [areas, setAreas] = useState<AreaRow[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -41,11 +34,14 @@ export function CategorySidebar({ isOpen, onToggle }: CategorySidebarProps) {
   }, [user]);
 
   const loadAreas = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('sort_order', { ascending: true })
         .order('name');
 
@@ -87,7 +83,7 @@ export function CategorySidebar({ isOpen, onToggle }: CategorySidebarProps) {
               {areas.map((area) => {
                 const Icon = getIconComponent(area.icon);
                 const active = isActiveCategory(area.id);
-                const color = area.color_hex || area.color;
+                const color = area.color;
 
                 return (
                   <Link

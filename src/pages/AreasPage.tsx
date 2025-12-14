@@ -34,10 +34,10 @@ interface Area {
   icon: string;
   color: string;
   outcome_count?: number;
-  background_image_url?: string;
-  description?: string;
-  identity_statement?: string;
-  color_hex?: string;
+  background_image_url?: string | null;
+  description?: string | null;
+  identity_statement?: string | null;
+  color_hex?: string | null;
   sort_order?: number;
 }
 
@@ -71,12 +71,15 @@ export function AreasPage() {
   }, [user]);
 
   const loadAreas = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       setLoading(true);
       const { data: areasData } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('sort_order', { ascending: true })
         .order('name');
 
@@ -118,8 +121,11 @@ export function AreasPage() {
           })
           .eq('id', editingArea.id);
       } else {
+        const userId = user?.id;
+        if (!userId) return;
+
         await supabase.from('areas').insert({
-          user_id: user?.id,
+          user_id: userId,
           name: formData.name,
           icon: formData.icon,
           color: formData.color,

@@ -48,9 +48,9 @@ export function WeeklyPlanner({ outcomes, onRefresh }: WeeklyPlannerProps) {
       .select('*')
       .eq('user_id', user.id)
       .eq('organization_id', organization.id)
-      .gte('start_time', startOfWeek.toISOString())
-      .lte('start_time', endOfWeek.toISOString())
-      .order('start_time');
+      .gte('scheduled_start', startOfWeek.toISOString())
+      .lte('scheduled_start', endOfWeek.toISOString())
+      .order('scheduled_start');
 
     if (!error && data) {
       setTimeBlocks(data);
@@ -156,7 +156,7 @@ export function WeeklyPlanner({ outcomes, onRefresh }: WeeklyPlannerProps) {
     const hours = Array.from({ length: 16 }, (_, i) => i + 6);
     const selectedDate = new Date(selectedDay);
     const dayBlocks = timeBlocks.filter(block => {
-      const blockDate = new Date(block.start_time).toISOString().split('T')[0];
+      const blockDate = new Date(block.scheduled_start).toISOString().split('T')[0];
       return blockDate === selectedDay;
     });
 
@@ -184,7 +184,7 @@ export function WeeklyPlanner({ outcomes, onRefresh }: WeeklyPlannerProps) {
         <div className="overflow-y-auto max-h-[600px]">
           {hours.map((hour) => {
             const hourBlocks = dayBlocks.filter(block => {
-              const blockHour = new Date(block.start_time).getHours();
+              const blockHour = new Date(block.scheduled_start).getHours();
               return blockHour === hour;
             });
 

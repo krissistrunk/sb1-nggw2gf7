@@ -3,7 +3,7 @@ import { Target, Plus, X, Save, Calendar, TrendingUp, CheckCircle2, Archive, Fil
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
-import type { Goal, Area, GoalInsert, Outcome } from '../lib/database.types';
+import type { Goal, Area, GoalInsert } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
@@ -47,11 +47,14 @@ export function GoalsPage() {
   }, [user, organization, activeTab, showDrafts]);
 
   const loadAreas = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('name');
       setAreas(data || []);
     } catch (error) {
@@ -60,12 +63,15 @@ export function GoalsPage() {
   };
 
   const loadGoals = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     setLoading(true);
     try {
       let query = supabase
         .from('goals')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .eq('goal_type', activeTab);
 
       if (showDrafts) {
@@ -84,7 +90,7 @@ export function GoalsPage() {
         const { data: yearlyData } = await supabase
           .from('goals')
           .select('*')
-          .eq('user_id', user?.id)
+          .eq('user_id', userId)
           .eq('goal_type', 'YEARLY')
           .eq('status', 'ACTIVE')
           .eq('is_draft', false)
@@ -137,17 +143,6 @@ export function GoalsPage() {
       loadGoals();
     } catch (error) {
       console.error('Error saving goal:', error);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this goal?')) return;
-
-    try {
-      await supabase.from('goals').delete().eq('id', id);
-      loadGoals();
-    } catch (error) {
-      console.error('Error deleting goal:', error);
     }
   };
 
@@ -510,8 +505,8 @@ export function GoalsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
-                <textarea
-                  value={formData.description}
+                  <textarea
+                  value={formData.description ?? ''}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Describe this goal in more detail..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -561,7 +556,7 @@ export function GoalsPage() {
                   Area of Focus
                 </label>
                 <select
-                  value={formData.area_id}
+                  value={formData.area_id ?? ''}
                   onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >

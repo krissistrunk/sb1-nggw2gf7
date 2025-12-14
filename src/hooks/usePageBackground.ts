@@ -10,9 +10,9 @@ export interface PageBackground {
   organization_id: string;
   page_identifier: string;
   image_url: string;
-  image_position: string;
-  overlay_opacity: number;
-  is_active: boolean;
+  image_position: string | null;
+  overlay_opacity: number | null;
+  is_active: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,12 +31,17 @@ export function usePageBackground(pageIdentifier: string) {
   }, [user, organization, pageIdentifier]);
 
   const loadBackground = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('page_backgrounds')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('page_identifier', pageIdentifier)
         .eq('is_active', true)
         .maybeSingle();

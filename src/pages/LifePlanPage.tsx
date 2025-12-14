@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Compass, Heart, User, Sparkles, Save, CreditCard as Edit2, Plus, X, Trash2, Target, Zap, Package } from 'lucide-react';
+import { Compass, Heart, User, Sparkles, Save, CreditCard as Edit2, Plus, X, Target, Zap, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
@@ -63,11 +63,14 @@ export function LifePlanPage() {
   }, [user, organization]);
 
   const loadAreas = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('name');
       setAreas(data || []);
     } catch (error) {
@@ -76,22 +79,30 @@ export function LifePlanPage() {
   };
 
   const loadLifePlan = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       const { data } = await supabase
         .from('life_plans')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .maybeSingle();
 
       if (data) {
         setLifePlan(data);
         setVision(data.vision);
         setPurpose(data.purpose || '');
-        setValues((data.values as Value[]) || []);
-        setRoles((data.roles as Role[]) || []);
-        setThreeToThrive((data.three_to_thrive as string[]) || []);
-        setResources((data.resources as Resources) || { people: [], skills: [], tools: [], financial: '' });
+        setValues(Array.isArray(data.values) ? (data.values as unknown as Value[]) : []);
+        setRoles(Array.isArray(data.roles) ? (data.roles as unknown as Role[]) : []);
+        setThreeToThrive(Array.isArray(data.three_to_thrive) ? (data.three_to_thrive as unknown as string[]) : []);
+        setResources(
+          data.resources && typeof data.resources === 'object' && !Array.isArray(data.resources)
+            ? (data.resources as unknown as Resources)
+            : { people: [], skills: [], tools: [], financial: '' }
+        );
       } else {
         setIsEditing(true);
       }
@@ -103,11 +114,15 @@ export function LifePlanPage() {
   };
 
   const handleSave = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     setSaving(true);
     try {
       const planData = {
-        user_id: user?.id,
-        organization_id: organization?.id,
+        user_id: userId,
+        organization_id: organizationId,
         vision,
         purpose,
         values: values as any,

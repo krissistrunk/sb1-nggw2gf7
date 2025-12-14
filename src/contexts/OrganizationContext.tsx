@@ -16,6 +16,17 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadOrganization();
+
+    // Listen for auth state changes to reload organization
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        loadOrganization();
+      } else if (event === 'SIGNED_OUT') {
+        setOrganization(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -25,6 +36,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, [organization]);
 
   const loadOrganization = async () => {
+    setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
 

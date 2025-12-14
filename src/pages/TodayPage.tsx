@@ -53,10 +53,10 @@ export function TodayPage() {
   } = usePageBackground('today');
 
   useEffect(() => {
-    if (user) {
+    if (user && organization?.id) {
       loadData();
     }
-  }, [user]);
+  }, [user, organization?.id]);
 
   const loadData = async () => {
     try {
@@ -66,6 +66,7 @@ export function TodayPage() {
         .from('outcomes')
         .select('*')
         .eq('user_id', user?.id)
+        .eq('organization_id', organization?.id)
         .eq('status', 'ACTIVE')
         .order('created_at', { ascending: false });
 
@@ -73,6 +74,7 @@ export function TodayPage() {
         .from('actions')
         .select('*')
         .eq('user_id', user?.id)
+        .eq('organization_id', organization?.id)
         .eq('scheduled_date', today)
         .order('is_must', { ascending: false })
         .order('created_at', { ascending: false });
@@ -104,6 +106,8 @@ export function TodayPage() {
           .from('actions')
           .select('*')
           .eq('outcome_id', outcomeId)
+          .eq('user_id', user?.id)
+          .eq('organization_id', organization?.id)
           .eq('done', false)
           .order('is_must', { ascending: false })
           .order('sort_order', { ascending: true })
@@ -135,7 +139,9 @@ export function TodayPage() {
     await supabase
       .from('actions')
       .update({ done, completed_at: done ? new Date().toISOString() : null })
-      .eq('id', actionId);
+      .eq('id', actionId)
+      .eq('user_id', user?.id)
+      .eq('organization_id', organization?.id);
 
     loadData();
   };

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
-import type { Chunk, ChunkWithItems, InboxItem } from '../lib/database.types';
+import type { Chunk, ChunkItem, ChunkWithItems, InboxItem } from '../lib/database.types';
 
 export function useChunks(includeArchived = false) {
   const { user } = useAuth();
@@ -17,37 +17,66 @@ export function useChunks(includeArchived = false) {
   }, [user, organization, includeArchived]);
 
   const loadChunks = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       setLoading(true);
       let query = supabase
         .from('chunks')
-        .select(`
-          *,
-          chunk_items (
-            *,
-            inbox_item:inbox_items (*)
-          )
-        `)
-        .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
+        .select('*')
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .order('updated_at', { ascending: false });
 
       if (!includeArchived) {
         query = query.eq('status', 'ACTIVE');
       }
 
-      const { data, error } = await query;
+      const { data: chunkRows, error: chunkError } = await query;
 
-      if (error) throw error;
+      if (chunkError) throw chunkError;
 
-      const chunksWithItems: ChunkWithItems[] = (data || []).map((chunk) => ({
+      const chunksList = chunkRows || [];
+      if (chunksList.length === 0) {
+        setChunks([]);
+        return;
+      }
+
+      const chunkIds = chunksList.map((c) => c.id);
+
+      const { data: chunkItemRows, error: chunkItemError } = await supabase
+        .from('chunk_items')
+        .select('*')
+        .in('chunk_id', chunkIds)
+        .order('sort_order', { ascending: true });
+
+      if (chunkItemError) throw chunkItemError;
+
+      const chunkItems = chunkItemRows || [];
+      const inboxItemIds = Array.from(new Set(chunkItems.map((ci) => ci.inbox_item_id)));
+
+      const { data: inboxRows, error: inboxError } = inboxItemIds.length
+        ? await supabase.from('inbox_items').select('*').in('id', inboxItemIds)
+        : { data: [] as InboxItem[], error: null };
+
+      if (inboxError) throw inboxError;
+
+      const inboxById = new Map<string, InboxItem>(inboxRows.map((i) => [i.id, i]));
+      const itemsByChunkId = new Map<string, Array<ChunkItem & { inbox_item: InboxItem }>>();
+
+      for (const chunkItem of chunkItems) {
+        const inboxItem = inboxById.get(chunkItem.inbox_item_id);
+        if (!inboxItem) continue;
+        const list = itemsByChunkId.get(chunkItem.chunk_id) || [];
+        list.push({ ...chunkItem, inbox_item: inboxItem });
+        itemsByChunkId.set(chunkItem.chunk_id, list);
+      }
+
+      const chunksWithItems: ChunkWithItems[] = chunksList.map((chunk) => ({
         ...chunk,
-        items: (chunk.chunk_items || [])
-          .map((ci: any) => ({
-            ...ci,
-            inbox_item: ci.inbox_item,
-          }))
-          .sort((a: any, b: any) => a.sort_order - b.sort_order),
+        items: (itemsByChunkId.get(chunk.id) || []).sort((a, b) => a.sort_order - b.sort_order),
       }));
 
       setChunks(chunksWithItems);
@@ -59,12 +88,16 @@ export function useChunks(includeArchived = false) {
   };
 
   const createChunk = async (name: string, color?: string) => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) throw new Error('Not authenticated');
+
     try {
       const { data, error } = await supabase
         .from('chunks')
         .insert({
-          user_id: user?.id!,
-          organization_id: organization?.id!,
+          user_id: userId,
+          organization_id: organizationId,
           name,
           color: color || '#6366F1',
           status: 'ACTIVE',
@@ -168,7 +201,7 @@ export function useChunks(includeArchived = false) {
     }
   };
 
-  const reorderItemsInChunk = async (chunkId: string, itemIds: string[]) => {
+  const reorderItemsInChunk = async (itemIds: string[]) => {
     try {
       const updates = itemIds.map((itemId, index) => ({
         id: itemId,

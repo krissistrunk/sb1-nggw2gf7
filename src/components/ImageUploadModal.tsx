@@ -25,7 +25,6 @@ export function ImageUploadModal({
   const [overlayOpacity, setOverlayOpacity] = useState(currentOpacity);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,7 +46,6 @@ export function ImageUploadModal({
     try {
       setUploading(true);
       const url = await onUpload(file);
-      setUploadedImageUrl(url);
       setSelectedImageUrl(url);
     } catch (error) {
       console.error('Error uploading image:', error);

@@ -149,7 +149,8 @@ class ElevenLabsService {
       throw new Error('Not authenticated');
     }
 
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321';
+    const apiUrl = `${supabaseUrl}/functions/v1/ai-assistant`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',

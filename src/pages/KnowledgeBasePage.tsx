@@ -22,9 +22,13 @@ import { NoteEditor } from '../components/NoteEditor';
 import type { KnowledgeNote } from '../lib/knowledge-service';
 import { knowledgeService } from '../lib/knowledge-service';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 export function KnowledgeBasePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { organization } = useOrganization();
   const { notes, tags, loading, searchNotes, loadNotes } = useKnowledge();
   const [showEditor, setShowEditor] = useState(false);
   const [selectedNote, setSelectedNote] = useState<KnowledgeNote | null>(null);
@@ -57,16 +61,20 @@ export function KnowledgeBasePage() {
     setShowEditor(true);
   };
 
-  const handleSaveNote = (note: KnowledgeNote) => {
+  const handleSaveNote = (_note: KnowledgeNote) => {
     setShowEditor(false);
     setSelectedNote(null);
     loadNotes();
   };
 
   const handleExport = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     setExporting(true);
     try {
-      const files = await knowledgeService.exportAsMarkdown();
+      const files = await knowledgeService.exportAsMarkdown({ userId, organizationId });
 
       for (const file of files) {
         const blob = new Blob([file.content], { type: 'text/markdown' });
@@ -95,6 +103,10 @@ export function KnowledgeBasePage() {
     input.accept = '.md';
     input.multiple = true;
     input.onchange = async (e: any) => {
+      const userId = user?.id;
+      const organizationId = organization?.id;
+      if (!userId || !organizationId) return;
+
       const files = Array.from(e.target.files) as File[];
 
       for (const file of files) {
@@ -102,7 +114,7 @@ export function KnowledgeBasePage() {
           const content = await file.text();
           const title = file.name.replace('.md', '').replace(/-/g, ' ');
 
-          await knowledgeService.createNote({
+          await knowledgeService.createNote({ userId, organizationId }, {
             title,
             content,
             note_type: 'fleeting',

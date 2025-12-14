@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Inbox, Plus, X, ArrowRight, Trash2, Target } from 'lucide-react';
+import { Inbox, Plus, X, ArrowRight, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 interface InboxItem {
   id: string;
@@ -18,6 +19,7 @@ interface Outcome {
 
 export function InboxPage() {
   const { user } = useAuth();
+  const { organization } = useOrganization();
   const [items, setItems] = useState<InboxItem[]>([]);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -29,24 +31,30 @@ export function InboxPage() {
   const [selectedOutcome, setSelectedOutcome] = useState('');
 
   useEffect(() => {
-    if (user) {
+    if (user && organization) {
       loadData();
     }
-  }, [user]);
+  }, [user, organization]);
 
   const loadData = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       const { data: itemsData } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('triaged', false)
         .order('created_at', { ascending: false });
 
       const { data: outcomesData } = await supabase
         .from('outcomes')
         .select('id, title')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('status', 'ACTIVE')
         .order('title');
 
@@ -59,11 +67,14 @@ export function InboxPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
 
     try {
       await supabase.from('inbox_items').insert({
-        user_id: user?.id,
-        organization_id: user?.organization_id,
+        user_id: userId,
+        organization_id: organizationId,
         content: formData.content,
         item_type: 'NOTE',
         triaged: false,
@@ -97,10 +108,12 @@ export function InboxPage() {
   const handleConvert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!convertingItem) return;
+    const userId = user?.id;
+    if (!userId) return;
 
     try {
       await supabase.from('actions').insert({
-        user_id: user?.id,
+        user_id: userId,
         outcome_id: selectedOutcome,
         title: convertingItem.content,
       });

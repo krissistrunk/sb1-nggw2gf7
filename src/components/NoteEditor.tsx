@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, X, Tag, Link as LinkIcon, Type } from 'lucide-react';
-import { knowledgeService, type KnowledgeNote } from '../lib/knowledge-service';
+import { Save, X, Tag, Link as LinkIcon } from 'lucide-react';
+import { knowledgeService, type KnowledgeNote, type WikiLink } from '../lib/knowledge-service';
 import { useKnowledge } from '../hooks/useKnowledge';
+import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 interface NoteEditorProps {
   note?: KnowledgeNote | null;
@@ -10,14 +12,15 @@ interface NoteEditorProps {
 }
 
 export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
-  const { tags, createTag, addTagToNote } = useKnowledge();
+  const { user } = useAuth();
+  const { organization } = useOrganization();
+  const { tags, createTag, createNote, updateNote } = useKnowledge();
   const [title, setTitle] = useState(note?.title || '');
   const [content, setContent] = useState(note?.content || '');
-  const [noteType, setNoteType] = useState(note?.note_type || 'fleeting');
+  const [noteType, setNoteType] = useState<KnowledgeNote['note_type']>(note?.note_type ?? 'fleeting');
   const [selectedTags, setSelectedTags] = useState<string[]>(note?.metadata?.tags || []);
-  const [showTagSelector, setShowTagSelector] = useState(false);
   const [newTagName, setNewTagName] = useState('');
-  const [wikiLinks, setWikiLinks] = useState<any[]>([]);
+  const [wikiLinks, setWikiLinks] = useState<WikiLink[]>([]);
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -35,36 +38,45 @@ export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
     setWikiLinks(links);
   }, [content]);
 
-  const handleSave = async () => {
-    if (!title.trim()) {
-      alert('Please enter a title');
-      return;
-    }
+	  const handleSave = async () => {
+	    if (!title.trim()) {
+	      alert('Please enter a title');
+	      return;
+	    }
 
-    setSaving(true);
-    try {
-      const noteData: any = {
-        title: title.trim(),
-        content: content.trim(),
-        note_type: noteType,
-        metadata: {
-          tags: selectedTags,
-        },
-      };
+	    if (!user || !organization) {
+	      alert('You must be logged in to save notes');
+	      return;
+	    }
 
-      let savedNote;
-      if (note?.id) {
-        savedNote = await knowledgeService.updateNote(note.id, noteData);
-      } else {
-        savedNote = await knowledgeService.createNote({
-          ...noteData,
-          source_type: 'manual',
-        });
-      }
+	    setSaving(true);
+	    try {
+	      const noteData: Partial<KnowledgeNote> = {
+	        title: title.trim(),
+	        content: content.trim(),
+	        note_type: noteType,
+	        metadata: {
+	          tags: selectedTags,
+	        },
+	      };
 
-      if (content.trim()) {
-        await knowledgeService.generateEmbedding(savedNote.id, title + '\n\n' + content);
-      }
+	      let savedNote;
+	      if (note?.id) {
+	        savedNote = await updateNote(note.id, noteData);
+	      } else {
+	        savedNote = await createNote({
+	          ...noteData,
+	          source_type: 'manual',
+	        });
+	      }
+
+	      if (content.trim()) {
+	        await knowledgeService.generateEmbedding(
+	          { userId: user.id, organizationId: organization.id },
+	          savedNote.id,
+	          title + '\n\n' + content
+	        );
+	      }
 
       onSave(savedNote);
     } catch (err) {
@@ -152,16 +164,16 @@ export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-          <div className="grid grid-cols-3 gap-2">
-            {noteTypes.map((type) => (
-              <button
-                key={type.value}
-                onClick={() => setNoteType(type.value as any)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  noteType === type.value
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+	          <div className="grid grid-cols-3 gap-2">
+	            {noteTypes.map((type) => (
+	              <button
+	                key={type.value}
+	                onClick={() => setNoteType(type.value as KnowledgeNote['note_type'])}
+	                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+	                  noteType === type.value
+	                    ? 'bg-primary-500 text-white'
+	                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+	                }`}
                 title={type.description}
               >
                 {type.label}

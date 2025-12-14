@@ -1,0 +1,55 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - img [ref=e7]
+    - heading "Create Account" [level=1] [ref=e11]
+    - paragraph [ref=e12]: Start your RPM journey today
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]: Name
+      - textbox "Name" [ref=e16]:
+        - /placeholder: Your name
+        - text: Test User
+    - generic [ref=e17]:
+      - generic [ref=e18]: Email
+      - textbox "Email" [ref=e19]:
+        - /placeholder: you@example.com
+        - text: e2e-1765658656207-dkfvm3@test.com
+    - generic [ref=e20]:
+      - generic [ref=e21]: Password
+      - textbox "Password" [ref=e22]:
+        - /placeholder: ••••••••
+        - text: TestPassword123!
+      - generic [ref=e27]: Excellent password!
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - img [ref=e30]
+          - generic [ref=e32]: At least 8 characters
+        - generic [ref=e33]:
+          - img [ref=e34]
+          - generic [ref=e36]: Contains uppercase letter (A-Z)
+        - generic [ref=e37]:
+          - img [ref=e38]
+          - generic [ref=e40]: Contains lowercase letter (a-z)
+        - generic [ref=e41]:
+          - img [ref=e42]
+          - generic [ref=e44]: Contains number (0-9)
+        - generic [ref=e45]:
+          - img [ref=e46]
+          - generic [ref=e48]: Contains special character (!@#$%^&*)
+    - generic [ref=e49]:
+      - generic [ref=e50]: Confirm Password
+      - textbox "Confirm Password" [ref=e51]:
+        - /placeholder: ••••••••
+        - text: TestPassword123!
+      - paragraph [ref=e52]:
+        - img [ref=e53]
+        - text: Passwords match
+    - button "Creating account..." [disabled] [ref=e55]
+  - paragraph [ref=e57]:
+    - text: Already have an account?
+    - link "Sign in" [ref=e58] [cursor=pointer]:
+      - /url: /login
+```

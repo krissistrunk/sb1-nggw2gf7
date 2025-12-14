@@ -39,7 +39,7 @@ export const MockAuth = {
     return { data: { user: null }, error: { message: 'Invalid credentials' } };
   },
 
-  async signUp(email: string, password: string, metadata: any) {
+  async signUp(email: string, _password: string, metadata: any) {
     // In mock mode, just return success
     const newUser = {
       id: `user-mock-${Date.now()}`,

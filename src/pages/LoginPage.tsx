@@ -1,15 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Target } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [loginComplete, setLoginComplete] = useState(false);
   const { signIn } = useAuth();
+  const { organization, loading: orgLoading } = useOrganization();
   const navigate = useNavigate();
+
+  // Navigate once organization is loaded after login
+  useEffect(() => {
+    if (loginComplete && !orgLoading) {
+      if (organization) {
+        navigate('/today');
+      } else {
+        navigate('/setup-organization');
+      }
+    }
+  }, [loginComplete, orgLoading, organization, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,10 +32,10 @@ export function LoginPage() {
 
     try {
       await signIn(email, password);
-      navigate('/today');
+      // Mark login complete - useEffect will handle navigation
+      setLoginComplete(true);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
-    } finally {
       setLoading(false);
     }
   };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Package, Loader2, X, Check } from 'lucide-react';
+import { Sparkles, Package, Loader2, X } from 'lucide-react';
 import { aiService, AIChunkSuggestions as ChunkSuggestionsType } from '../lib/ai-service';
 
 interface AIChunkSuggestionsProps {

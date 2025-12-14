@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, User, Trash2, Package, Edit2, Archive, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
+import { Target, Heart, Zap, ChevronRight, CheckCircle2, Clock, Plus, X, Inbox, Flame, Trash2, Package, Edit2, Archive, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { supabase } from '../lib/supabase';
@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useOrganization } from '../contexts/OrganizationContext';
 import { useActions } from '../hooks/useActions';
 import { DraggableActionItem } from '../components/DraggableActionItem';
-import type { OutcomeWithRelations, DailyNote, Action, InboxItem, ChunkWithItems } from '../lib/database.types';
+import type { OutcomeWithRelations, Action, InboxItem, Area, Outcome } from '../lib/database.types';
 import { BackgroundHeroSection } from '../components/BackgroundHeroSection';
 import { ImageUploadModal } from '../components/ImageUploadModal';
 import { usePageBackground } from '../hooks/usePageBackground';
@@ -24,7 +24,6 @@ export function DailyPlanningPage() {
   const { deleteAction, reorderActions } = useActions();
   const {
     chunks,
-    loading: chunksLoading,
     createChunk,
     updateChunk,
     deleteChunk,
@@ -58,7 +57,6 @@ export function DailyPlanningPage() {
   const [editActionTitle, setEditActionTitle] = useState('');
   const [editActionDuration, setEditActionDuration] = useState(30);
   const [mustActions, setMustActions] = useState<Set<string>>(new Set());
-  const [delegatedActions, setDelegatedActions] = useState<Record<string, string>>({});
   const [capturedItems, setCapturedItems] = useState<string[]>([]);
   const [capturedItemsData, setCapturedItemsData] = useState<InboxItem[]>([]);
   const [draggedItem, setDraggedItem] = useState<InboxItem | null>(null);
@@ -93,13 +91,15 @@ export function DailyPlanningPage() {
 
   const loadData = async () => {
     try {
+      const userId = user?.id;
+      const organizationId = organization?.id;
+      if (!userId || !organizationId) return;
+
       const { data: outcomesData } = await supabase
         .from('outcomes')
-        .select(`
-          *,
-          areas (*)
-        `)
-        .eq('user_id', user?.id)
+        .select('*')
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('status', 'ACTIVE')
         .order('created_at', { ascending: false });
 
@@ -119,26 +119,39 @@ export function DailyPlanningPage() {
         .order('sort_order', { ascending: true });
 
       // Group actions by outcome_id
-      const actionsByOutcome: Record<string, typeof allActionsData> = {};
+      const actionsByOutcome: Record<string, Action[]> = {};
       (allActionsData || []).forEach(action => {
         if (!actionsByOutcome[action.outcome_id]) {
           actionsByOutcome[action.outcome_id] = [];
         }
-        actionsByOutcome[action.outcome_id].push(action);
+        actionsByOutcome[action.outcome_id]!.push(action);
       });
 
-      // Combine outcomes with their actions
-      const outcomesWithActions = outcomesData.map(outcome => ({
+      const areaIds = Array.from(
+        new Set(outcomesData.map((o) => o.area_id).filter((id): id is string => Boolean(id)))
+      );
+      const { data: areasData, error: areasError } = areaIds.length
+        ? await supabase.from('areas').select('*').in('id', areaIds)
+        : { data: [] as Area[], error: null };
+
+      if (areasError) throw areasError;
+
+      const areasById = new Map<string, Area>((areasData || []).map((a) => [a.id, a]));
+
+      const outcomesWithActions: OutcomeWithRelations[] = (outcomesData as Outcome[]).map((outcome) => ({
         ...outcome,
+        area: outcome.area_id ? areasById.get(outcome.area_id) || null : null,
+        goal: null,
         actions: actionsByOutcome[outcome.id] || [],
-      } as OutcomeWithRelations));
+      }));
 
       setOutcomes(outcomesWithActions);
 
       const { data: actionIdeasData } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('item_type', 'ACTION_IDEA')
         .eq('triaged', false)
         .order('created_at', { ascending: false });
@@ -148,7 +161,8 @@ export function DailyPlanningPage() {
       const { data: dailyNoteData } = await supabase
         .from('daily_notes')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('date', today)
         .maybeSingle();
 
@@ -319,18 +333,10 @@ export function DailyPlanningPage() {
     setMustActions(newMustActions);
   };
 
-  const handleDelegationChange = (actionId: string, delegatedTo: string) => {
-    if (delegatedTo.trim()) {
-      setDelegatedActions({ ...delegatedActions, [actionId]: delegatedTo });
-    } else {
-      const newDelegated = { ...delegatedActions };
-      delete newDelegated[actionId];
-      setDelegatedActions(newDelegated);
-    }
-  };
-
   const handleAddAction = async (outcomeId: string) => {
     if (!newActionTitle.trim()) return;
+    const userId = user?.id;
+    if (!userId) return;
 
     try {
       const outcome = outcomes.find((o) => o.id === outcomeId);
@@ -339,7 +345,7 @@ export function DailyPlanningPage() {
       const { data: newAction } = await supabase
         .from('actions')
         .insert({
-          user_id: user?.id,
+          user_id: userId,
           outcome_id: outcomeId,
           title: newActionTitle,
           duration_minutes: newActionDuration,
@@ -377,11 +383,14 @@ export function DailyPlanningPage() {
   };
 
   const handleConvertActionIdea = async (inboxItem: InboxItem, outcomeId: string) => {
+    const userId = user?.id;
+    if (!userId) return;
+
     try {
       const { data: newAction } = await supabase
         .from('actions')
         .insert({
-          user_id: user?.id,
+          user_id: userId,
           outcome_id: outcomeId,
           title: inboxItem.content,
           duration_minutes: 30,
@@ -559,13 +568,17 @@ export function DailyPlanningPage() {
   };
 
   const handleSaveDailyPlan = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     setSaving(true);
     try {
       const { data: existingNote } = await supabase
         .from('daily_notes')
         .select('id')
-        .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('date', today)
         .maybeSingle();
 
@@ -579,8 +592,8 @@ export function DailyPlanningPage() {
           .eq('id', existingNote.id);
       } else {
         await supabase.from('daily_notes').insert({
-          user_id: user?.id,
-          organization_id: organization?.id,
+          user_id: userId,
+          organization_id: organizationId,
           date: today,
           morning_intention: morningIntention,
         });
@@ -743,8 +756,12 @@ export function DailyPlanningPage() {
                 </p>
               </div>
               <VoiceCoachButton
-                onRecordingComplete={async (audioUrl, blob, durationSeconds) => {
+                onRecordingComplete={async (_audioUrl, blob, _durationSeconds) => {
                   try {
+                    const userId = user?.id;
+                    const organizationId = organization?.id;
+                    if (!userId || !organizationId) return;
+
                     const base64Audio = await new Promise<string>((resolve) => {
                       const reader = new FileReader();
                       reader.onloadend = () => {
@@ -759,8 +776,8 @@ export function DailyPlanningPage() {
                     if (result.items && result.items.length > 0) {
                       for (const item of result.items) {
                         const { data } = await supabase.from('inbox_items').insert({
-                          user_id: user?.id,
-                          organization_id: organization?.id,
+                          user_id: userId,
+                          organization_id: organizationId,
                           content: item.content,
                           item_type: item.type === 'ACTION' ? 'ACTION_IDEA' : item.type === 'OUTCOME' ? 'OUTCOME_IDEA' : 'NOTE',
                           triaged: false,
@@ -789,9 +806,13 @@ export function DailyPlanningPage() {
               if (!newCaptureItem.trim()) return;
 
               try {
+                const userId = user?.id;
+                const organizationId = organization?.id;
+                if (!userId || !organizationId) return;
+
                 const { data } = await supabase.from('inbox_items').insert({
-                  user_id: user?.id,
-                  organization_id: organization?.id,
+                  user_id: userId,
+                  organization_id: organizationId,
                   content: newCaptureItem.trim(),
                   item_type: 'NOTE',
                   triaged: false,
@@ -895,9 +916,13 @@ export function DailyPlanningPage() {
               if (!newCaptureItem.trim()) return;
 
               try {
+                const userId = user?.id;
+                const organizationId = organization?.id;
+                if (!userId || !organizationId) return;
+
                 const { data } = await supabase.from('inbox_items').insert({
-                  user_id: user?.id,
-                  organization_id: organization?.id,
+                  user_id: userId,
+                  organization_id: organizationId,
                   content: newCaptureItem.trim(),
                   item_type: 'NOTE',
                   triaged: false,

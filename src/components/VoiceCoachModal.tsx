@@ -4,7 +4,6 @@ import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { aiService } from '../lib/ai-service';
 import { useKnowledge } from '../hooks/useKnowledge';
-import { useOrganization } from '../contexts/OrganizationContext';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { RelevantKnowledgeSidebar } from './RelevantKnowledgeSidebar';
@@ -64,7 +63,6 @@ export function VoiceCoachModal({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { extractKnowledgeFromSession } = useKnowledge();
-  const { organization } = useOrganization();
   const { user } = useAuth();
 
   const handleSilenceDetected = useCallback(() => {
@@ -90,7 +88,6 @@ export function VoiceCoachModal({
   });
 
   const {
-    speaking,
     supported: speechSupported,
     speak,
     cancel: cancelSpeech,
@@ -206,7 +203,7 @@ export function VoiceCoachModal({
     return lowerText.includes('?') || questionWords.some(word => lowerText.startsWith(word + ' '));
   };
 
-  const handleRecordingComplete = async (audioUrl: string, blob: Blob, duration: number) => {
+  const handleRecordingComplete = async (_audioUrl: string, blob: Blob, _duration: number) => {
     try {
       setIsTranscribing(true);
       setError(null);

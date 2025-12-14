@@ -32,7 +32,6 @@ export function CapturePage() {
   const { organization } = useOrganization();
   const [items, setItems] = useState<InboxItem[]>([]);
   const [newItem, setNewItem] = useState('');
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('categorize');
   const [draggedItem, setDraggedItem] = useState<InboxItem | null>(null);
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
@@ -53,7 +52,6 @@ export function CapturePage() {
 
   const {
     chunks,
-    loading: chunksLoading,
     createChunk,
     updateChunk,
     deleteChunk,
@@ -72,12 +70,16 @@ export function CapturePage() {
   }, [user, organization]);
 
   const loadItems = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       const { data } = await supabase
         .from('inbox_items')
         .select('*')
-        .eq('user_id', user?.id)
-        .eq('organization_id', organization?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('triaged', false)
         .is('chunk_id', null)
         .order('created_at', { ascending: false });
@@ -85,23 +87,26 @@ export function CapturePage() {
       setItems(data || []);
     } catch (error) {
       console.error('Error loading inbox items:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadAreasAndGoals = async () => {
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
+
     try {
       const { data: areasData } = await supabase
         .from('areas')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .order('name');
 
       const { data: goalsData } = await supabase
         .from('goals')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
         .eq('status', 'ACTIVE')
         .order('year', { ascending: false });
 
@@ -115,11 +120,14 @@ export function CapturePage() {
   const handleCapture = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.trim()) return;
+    const userId = user?.id;
+    const organizationId = organization?.id;
+    if (!userId || !organizationId) return;
 
     try {
       await supabase.from('inbox_items').insert({
-        user_id: user?.id,
-        organization_id: organization?.id,
+        user_id: userId,
+        organization_id: organizationId,
         content: newItem.trim(),
         item_type: 'NOTE',
         triaged: false,
@@ -138,15 +146,6 @@ export function CapturePage() {
       loadItems();
     } catch (error) {
       console.error('Error deleting item:', error);
-    }
-  };
-
-  const handleTypeChange = async (id: string, type: string) => {
-    try {
-      await supabase.from('inbox_items').update({ item_type: type }).eq('id', id);
-      loadItems();
-    } catch (error) {
-      console.error('Error updating item type:', error);
     }
   };
 
