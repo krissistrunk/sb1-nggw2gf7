@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Save, X, Tag, Link as LinkIcon, Type } from 'lucide-react';
 import { knowledgeService, type KnowledgeNote } from '../lib/knowledge-service';
 import { useKnowledge } from '../hooks/useKnowledge';
+import { useAuth } from '../hooks/useAuth';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 interface NoteEditorProps {
   note?: KnowledgeNote | null;
@@ -11,6 +13,8 @@ interface NoteEditorProps {
 
 export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
   const { tags, createTag, addTagToNote } = useKnowledge();
+  const { user } = useAuth();
+  const { organization } = useOrganization();
   const [title, setTitle] = useState(note?.title || '');
   const [content, setContent] = useState(note?.content || '');
   const [noteType, setNoteType] = useState(note?.note_type || 'fleeting');
@@ -41,6 +45,11 @@ export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
       return;
     }
 
+    if (!user || !organization) {
+      alert('Please sign in to save notes');
+      return;
+    }
+
     setSaving(true);
     try {
       const noteData: any = {
@@ -59,6 +68,8 @@ export function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
         savedNote = await knowledgeService.createNote({
           ...noteData,
           source_type: 'manual',
+          user_id: user.id,
+          organization_id: organization.id,
         });
       }
 
